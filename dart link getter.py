@@ -17,21 +17,22 @@ import os
 
 crawl_start_time = datetime.now()
 print("crawl_start_time : ", crawl_start_time)
-# begin_date = '20110101'
+begin_date = '20110101'
 # end_date = '20111231'
 # begin_date = '20120101'
-# end_date = '20121231'
-begin_date = '20130101'
-# end_date = '20131231'
-# begin_date = '20140101'
-end_date = '20141231'
-# begin_date = '20150101'
-# end_date = '20151231'
+end_date = '20121231'
+# begin_date = '20130101'  # 완료
+# end_date = '20131231'  # 완료
+# begin_date = '20140101'  # 완료
+# end_date = '20141231'  # 완료
+# begin_date = '20150101'  # 완료
+# end_date = '20151231'  # 완료
 # begin_date = '20160101'  # 완료
 # end_date = '20161231'  # 완료
 # begin_date = '20170101'  # 완료
 # end_date = '20171231'  # 완료
 # begin_date = '20180101'  # 완료
+# end_date = '20150817'  # 완료
 # end_date = '20181231'  # 완료
 
 
@@ -47,17 +48,17 @@ def goto_next_page():
     if current_page_num != max_page_num:  # 마지막 페이지인지 확인
         current_page_num += 1
         driver.execute_script("search(" + str(current_page_num) + ")")  # 자바스크립트 함수 호출하는 방식 사용
-        return wait_until_result_appear()
+        return wait_until_result_appear('table_list', 7)
     else:  # 마지막 페이지라면
         print('any more page!')
         return False
 
 
-def wait_until_result_appear():  # 로딩이 끝났는지 확인. 100건 기준으로 일반적으로 7초면 로딩 완료.
-    delay = 7  # 로딩만 확인할 뿐 table_list가 나타난다고 검색결과가 0건이 아니란 보장은 없음.
+def wait_until_result_appear(class_name, delay):  # 로딩이 끝났는지 확인. 100건 기준으로 일반적으로 7초면 로딩 완료.
+    # delay = 7  # 로딩만 확인할 뿐 table_list가 나타난다고 검색결과가 0건이 아니란 보장은 없음.
     while True:
         try:
-            element_present = EC.presence_of_element_located((By.CLASS_NAME, 'table_list'))
+            element_present = EC.presence_of_element_located((By.CLASS_NAME, class_name))
             WebDriverWait(driver, delay).until(element_present)
             # print("Page is ready!")
             return True
@@ -210,7 +211,7 @@ def make_sheet(crp_cls):
                     # print(prim_index)
                     rcp_no = primary_doc_list[prim_index].get_attribute('value').split("=")[1]
                     driver.get('http://dart.fss.or.kr/dsaf001/main.do?rcpNo=' + rcp_no)
-
+                wait_until_result_appear('x-tree-root-node', 1)
                 doc_contents = driver.find_element_by_class_name('x-tree-root-node').find_elements_by_tag_name('li')
 
                 foot_note = ''  # 재무제표 주석
@@ -245,18 +246,23 @@ def make_sheet(crp_cls):
                         # texts = driver.find_element_by_xpath('/html/body').text.split('\n')
                         tables = driver.find_element_by_xpath('/html/body').find_elements_by_tag_name('table')
                         # 테이블 중에 법인명이 가장 빨리나오는 법인이 해당 재무제표의 감사법인이라고 간주.
+                        texts = ''  # 법인이란 키워드는 커녕 아무 내용도 없는 경우도 존재할 경우를 대비
                         for table in tables:
                             if '법인' in table.text:
                                 texts = table.text
                                 break
+                            else:
+                                texts = table.text
                         # 공시하는 회사명 법인명을 적었을 수 있다. 열 이름이 '법인', '회계법인'일 가능성도 존재.
                         is_1strow = 0
-                        for line in texts.split('\n'):
+                        texts_list = texts.split('\n')
+                        for line in texts_list:
                             # print(line)
                             if acc_crp == '' and is_1strow == 0:
                                 acc_crp = 'http://dart.fss.or.kr/dsaf001/main.do?rcpNo=' + rcp_no
                                 is_1strow = 1
                                 continue  # 첫줄은 건너뛴다. (주의)
+                            print(line)
                             if '법인' in line:  # 추후에 교차확인 요함.
                                 for corporation in line.split():  # '한영 회계법인' 처럼 입력되면 아예 아무것도 입력이 안되는 사태가 벌어짐.
                                     if '회계법인' in corporation and '법인' != corporation and '회계법인' != corporation:  # (주의)
@@ -347,8 +353,8 @@ def make_sheet(crp_cls):
 def main():
     init()
     # crp_cls = input('법인유형(e.g. 유가증권시장이면 Y, 코스닥이면 K, 코넥스면 N, 기타는 E)를 대문자로 입력하세요.')
-    crp_cls = 'Y'  # 테스트용
-    # crp_cls = 'K'  # 테스트용
+    # crp_cls = 'Y'  # 테스트용
+    crp_cls = 'K'  # 테스트용
     now = datetime.now().strftime('%Y-%m-%d %H-%M-%S')  # 파일이름 지을때 사용할 문자열(날짜형이 아닌 문자형)
     driver.get('http://dart.fss.or.kr/dsab002/main.do')
 
@@ -386,7 +392,7 @@ def main():
     select.select_by_visible_text('100')  # select by visible text
 
     driver.find_element_by_id('searchpng').click()
-    wait_until_result_appear()
+    wait_until_result_appear('table_list', 7)
     check_more = check_page_existence()
     page_num = 0
 
