@@ -14,6 +14,13 @@ from selenium.common.exceptions import StaleElementReferenceException
 from selenium.webdriver.support import expected_conditions
 from dateutil.relativedelta import relativedelta
 import os
+import html5lib
+import requests
+import urllib
+import math
+import copy
+import numpy as np
+from bs4 import BeautifulSoup
 
 crawl_start_time = datetime.now()
 print("crawl_start_time : ", crawl_start_time)
@@ -21,19 +28,19 @@ begin_date = '20110101'
 # end_date = '20111231'
 # begin_date = '20120101'
 end_date = '20121231'
-# begin_date = '20130101'  # 완료
-# end_date = '20131231'  # 완료
-# begin_date = '20140101'  # 완료
-# end_date = '20141231'  # 완료
-# begin_date = '20150101'  # 완료
-# end_date = '20151231'  # 완료
-# begin_date = '20160101'  # 완료
-# end_date = '20161231'  # 완료
-# begin_date = '20170101'  # 완료
-# end_date = '20171231'  # 완료
-# begin_date = '20180101'  # 완료
-# end_date = '20150817'  # 완료
-# end_date = '20181231'  # 완료
+# begin_date = '20130101'  #
+# end_date = '20131231'  #
+# begin_date = '20140101'  #
+# end_date = '20141231'  #
+# begin_date = '20150101'  #
+# end_date = '20151231'  #
+# begin_date = '20160101'  #
+# end_date = '20161231'  #
+# begin_date = '20170101'  #
+# end_date = '20171231'  #
+# begin_date = '20180101'  #
+# end_date = '20150817'  #
+# end_date = '20181231'  #
 
 
 def init():
@@ -74,19 +81,37 @@ def check_page_existence():  # 검색결과가 없는지 확인. 있으면 True 
         return False
 
 
-def get_attached_footnote():  # 재무제표 본문의 주석을 스크래핑 위한 코드.
+def get_attached_footnote(col_or_not, directory_name, rcp_no):  # 재무제표 본문의 주석을 스크래핑 위한 코드.
     doc_contents = driver.find_element_by_class_name('x-tree-root-node').find_elements_by_tag_name(
         'li')  # 구조상 ul이 하위에 포함된 li까지 검출된다.
     for doc_content in doc_contents:  # 분기재무제표 ul 아래 있는 li에 주석이 있다면, ul, li 텍스트 둘다 나오게 된다. 그러나 최종적으로는 말단에 위치한 텍스트를 붙여 오게 된다.
-        # 비효율적인 구간이므로 추후 개량을 요함.  # 개량 완료
+        # 비효율적인 구간이므로 추후 개량을 요함.  # 해당 li 하위에 추가적인 li가 없다면 안 나오는 식으로 개량 완료(설마 주석이 하위에 뭔가를 두는 일은 없을것)
         if "주석" in doc_content.text and len(
                 doc_content.find_element_by_class_name('x-tree-node-ct').find_elements_by_tag_name('li')) == 0:
             # print('at ', doc_content.text)
             doc_content.click()
             driver.switch_to.frame(driver.find_element_by_tag_name("iframe"))
             foot_note = driver.find_element_by_xpath('/html/body').text
+            get_table_at_footnotes(col_or_not, directory_name, rcp_no)  # 별도로 테이블 추출해서 저장.
             driver.switch_to.default_content()
     return foot_note
+
+
+def get_table_at_footnotes(col_or_not, directory_name, rcp_no):
+    # tbl_list = driver.find_element_by_xpath('/html/body').find_elements_by_tag_name('table')
+    tbl_list = list(BeautifulSoup(driver.page_source).find_all('table'))
+    tbl_list = [str(i) for i in tbl_list]
+    tbl_list = pd.DataFrame(tbl_list)
+
+    if not os.path.exists(
+            directory_name + '/' + rcp_no):  # 페이지별 크롤링 결과를 pickel로 저장하는 디렉토리에 rcp_no 이름의 디렉토리 작성. 거기에 연결, 개별 주석의 테이블 데이터 넣을 예정.
+        os.mkdir(directory_name + '/' + rcp_no)
+    if col_or_not:
+        file_name = 'col_table_list ' + str(rcp_no)  # 개별, 연결 구분은 앞의 col의 유무에 따라.
+        tbl_list.to_pickle(directory_name + '/' + rcp_no + "/" + file_name + ".pkl")
+    else:
+        file_name = 'table_list ' + str(rcp_no)
+        tbl_list.to_pickle(directory_name + '/' + rcp_no + "/" + file_name + ".pkl")
 
 
 def get_dcmNo_and_col_dcmNo(option_list, rcp_dt, dcm_no, col_dcm_no):
@@ -149,26 +174,29 @@ def get_index_of_rpt_nm_at_closest_date(option_list, rcp_dt, rpt_nm):  # optionl
     return index
 
 
-def make_sheet(crp_cls):
+def make_sheet(crp_cls, directory_name):  # 디렉토리명은 추후 추가적인 테이블 추출 후 사용 예정.
     df = pd.DataFrame()
-    # tbl = driver.find_element_by_xpath("//*[@id='listContents']/div[1]/table").get_attribute('outerHTML')
-    # tmp_df = pd.read_html(tbl) # 곧장 데이터 프레임으로 테이블을 변환시킬 수 있는 코드. 추후 주석의 테이블을 처리하는 식으로 쓸 수 있을것.
-    # table_data = driver.find_elements_by_xpath('//*[@id="listContents"]/div[1]/table')
     tbody = driver.find_element_by_xpath('//*[@id="listContents"]/div[1]/table/tbody')
     i = 0
     # row = tbody.find_elements_by_tag_name('tr')[0] # for test
     for row in tbody.find_elements_by_tag_name('tr'):
         i += 1
-        # j = 0
+        # j = 2
         print('i', i)
-        for j in (1, 4, 2):
-            cell = row.find_elements_by_tag_name('td')[j]  # for test
+        for j in (1, 4, 2):  # 먼저 날짜 얻어두는게 유리.
+            cell = row.find_elements_by_tag_name('td')[j]
+            # cell = row.find_elements_by_tag_name('td')[2]  # for test
             # print('j', j)
             if j == 1:
                 crp_nm = cell.text.strip()  # 공시대상회사(종목명)
+                '''
+                cell.click()
+                wait_until_result_appear('pop_table_B', 0.5)
+                crp_cd = driver.find_element_by_xpath('//*[@id="pop_body"]/div/table/tbody/tr[4]/td').text
+                driver.find_element_by_xpath('//*[@id="closePop"]/img').click()
+                '''
                 current_window = driver.current_window_handle
-                # driver.execute_script("window.open('http://dart.fss.or.kr"+cell.find_element_by_tag_name('a').get_attribute('href')+"')")
-                driver.execute_script("window.open('" + cell.find_element_by_tag_name('a').get_attribute('href') + "')")
+                driver.execute_script("window.open('" + cell.find_element_by_tag_name('a').get_attribute('href') + "')")  # 이 코드에서 자꾸 사용하는 윈도우 창이 바뀌어 사용에 불편을 줌.
                 new_window = [window for window in driver.window_handles if window != current_window][0]
                 driver.switch_to.window(new_window)
 
@@ -179,6 +207,7 @@ def make_sheet(crp_cls):
                 # driver.execute_script("closeCorpInfo(); return false;")  # 스크립트 실행
                 driver.close()  # 현재 탭을 닫고 기존 검색결과 창으로 돌아감.
                 driver.switch_to.window(current_window)
+
             elif j == 4:
                 rcp_dt = cell.text  # 접수일자. 형식은 'yyyy.mm.dd' 파싱에 주의.
             elif j == 2:
@@ -223,21 +252,23 @@ def make_sheet(crp_cls):
                     # print(doc_content.text)
                     if "연결재무제표 주석" in doc_content.text and len(
                             doc_content.find_element_by_class_name('x-tree-node-ct').find_elements_by_tag_name(
-                                    'li')) == 0:  # 연결 재무제표가 그냥 계열사가 없다고만 서술 될 가능성도 존재.
+                                'li')) == 0:  # 연결 재무제표가 그냥 계열사가 없다고만 서술 될 가능성도 존재.
                         # print("연결재무제표 주석")
                         doc_content.click()
                         driver.switch_to.frame(
                             driver.find_element_by_tag_name("iframe"))  # iframe은 selenium으로 읽을 때 주의 사항. 버그 예상 지점.
                         consolidated_foot_note = driver.find_element_by_xpath('/html/body').text
+                        get_table_at_footnotes(True, directory_name, rcp_no)
                         driver.switch_to.default_content()
                         continue  # 연결재무제표 주석은 재무제표 주석이라는 문자열을 공통으로 포함하기 때문.
                     if "재무제표 주석" in doc_content.text and len(
                             doc_content.find_element_by_class_name('x-tree-node-ct').find_elements_by_tag_name(
-                                    'li')) == 0:
+                                'li')) == 0:
                         # print('재무제표 주석')
                         doc_content.click()
                         driver.switch_to.frame(driver.find_element_by_tag_name("iframe"))
                         foot_note = driver.find_element_by_xpath('/html/body').text
+                        get_table_at_footnotes(False, directory_name, rcp_no)
                         driver.switch_to.default_content()
                     if "감사인" in doc_content.text:  # IV. 감사인의 감사의견 등
                         # print(doc_content.text)
@@ -262,7 +293,7 @@ def make_sheet(crp_cls):
                                 acc_crp = 'http://dart.fss.or.kr/dsaf001/main.do?rcpNo=' + rcp_no
                                 is_1strow = 1
                                 continue  # 첫줄은 건너뛴다. (주의)
-                            print(line)
+                            # print(line)
                             if '법인' in line:  # 추후에 교차확인 요함.
                                 for corporation in line.split():  # '한영 회계법인' 처럼 입력되면 아예 아무것도 입력이 안되는 사태가 벌어짐.
                                     if '회계법인' in corporation and '법인' != corporation and '회계법인' != corporation:  # (주의)
@@ -275,7 +306,8 @@ def make_sheet(crp_cls):
                 dcm_no = 'NA'  # 감사보고서 번호
                 col_dcm_no = 'NA'  # 연결 감사 보고서 번호
 
-                if foot_note == '':  # 만약 재무제표 상에서 주석을 긁어오지 못했다면 첨부파일을 찾을 것.
+                if foot_note == '' or len(
+                        foot_note.split('\n')) < 5:  # 만약 재무제표 상에서 주석을 긁어오지 못했다면 또는 주석 란에 몇줄 적지 않았다면 첨부파일을 찾을 것.
                     attach_doc_list = driver.find_element_by_id('att').find_elements_by_tag_name('option')
                     # select = Select(driver.find_element_by_id('att'))
                     '''
@@ -298,12 +330,12 @@ def make_sheet(crp_cls):
 
                     if dcm_no != "NA":
                         driver.get('http://dart.fss.or.kr/dsaf001/main.do?' + dcm_no)
-                        foot_note = get_attached_footnote()
+                        foot_note = get_attached_footnote(False, directory_name, rcp_no)
                     else:
                         dcm_no == "http://dart.fss.or.kr/dsaf001/main.do?rcpNo=" + rcp_no  # 만약 본문에도 주석을 못 얻었는데 이렇다면 문제가 있는것. 눈으로 확인 요함.
                     if col_dcm_no != "NA":  # 각각 실행해야하므로 elif로 묶지 말 것.
                         driver.get('http://dart.fss.or.kr/dsaf001/main.do?' + col_dcm_no)
-                        consolidated_foot_note = get_attached_footnote()
+                        consolidated_foot_note = get_attached_footnote(True, directory_name, rcp_no)
                     else:
                         col_dcm_no == "http://dart.fss.or.kr/dsaf001/main.do?rcpNo=" + rcp_no  # 만약 본문에도 주석을 못 얻었는데 이렇다면 문제가 있는것. 눈으로 확인 요함.
 
@@ -323,10 +355,17 @@ def make_sheet(crp_cls):
 
                         # print(option_text)
                         dcm_no, col_dcm_no = get_dcmNo_and_col_dcmNo(attach_doc_list, rcp_dt, dcm_no, col_dcm_no)
-                if len(consolidated_foot_note.split('\n')) < 5:  # and '없' in consolidated_foot_note:  # 5줄 미만이면 연결재무제표가 없는데도 항목이 존재한것.
+                if len(consolidated_foot_note.split(
+                        '\n')) < 5:  # and '없' in consolidated_foot_note:  # 5줄 미만이면 연결재무제표가 없는데도 항목이 존재한것.
                     print('연결재무제표 주석 해당사항 없음')
                     col_dcm_no = 'NA'
                     consolidated_foot_note = 'NA'  # 일단 내용이 없다는 것만이라도 표시를 해두는 것이 좋을 것.
+                if len(foot_note.split(
+                        '\n')) < 5:  # and '없' in consolidated_foot_note:  # 5줄 미만이면 연결재무제표가 없는데도 항목이 존재한것.
+                    print('error 개별 재무제표 주석도 몇 줄 없음')
+                    dcm_no = 'NA'
+                    foot_note = 'NA'  # 일단 내용이 없다는 것만이라도 표시를 해두는 것이 좋을 것.
+
                 driver.close()  # 탭을 닫고 기존 검색결과 창으로 돌아감.
                 driver.switch_to.window(current_window)
 
@@ -342,7 +381,8 @@ def make_sheet(crp_cls):
         df.loc[i - 1, 'dcm_no'] = dcm_no  # 만약 주석이 다른 첨부파일에 있다면 그 첨부파일의 번호. 추후 재확인을 위함.
         df.loc[i - 1, 'col_dcm_no'] = col_dcm_no  # 만약 연결 주석이 다른 첨부파일에 있다면 그 첨부파일의 번호. 추후 재확인을 위함.
         df.loc[i - 1, 'foot_note'] = foot_note  # 주석
-        df.loc[i - 1, 'consolidated_foot_note'] = consolidated_foot_note  # 연결재무제표 주석. 주석과 연결재무제표주석이 있다면 일단 연결재무제표 주석을 우선시해서 크롤링.
+        df.loc[
+            i - 1, 'consolidated_foot_note'] = consolidated_foot_note  # 연결재무제표 주석. 주석과 연결재무제표주석이 있다면 일단 연결재무제표 주석을 우선시해서 크롤링.
         df.loc[i - 1, 'acc_crp'] = acc_crp  # 감사보고서를 작성한 회사.
         df.loc[i - 1, 'rcp_dt'] = rcp_dt  # 접수일자
 
@@ -390,6 +430,7 @@ def main():
     # 최대 조회 수 지정(최대 100까지 볼 수 있다)
     select = Select(driver.find_element_by_id('maxResultsCb'))
     select.select_by_visible_text('100')  # select by visible text
+    # select.select_by_visible_text('15')  # for test
 
     driver.find_element_by_id('searchpng').click()
     wait_until_result_appear('table_list', 7)
@@ -406,13 +447,12 @@ def main():
         # searchDateEndStr = searchDateEnd.strftime('%Y-%m-%d')
         page_num += 1
         print('page : ', page_num)
-        df = make_sheet(crp_cls)  # 로드된 웹 요소들 긁어오기.
-        df.to_excel(directory_name + '/' +
-            crp_cls + '_' + str(page_num) + '_from' + begin_date + 'to' + end_date + '_crawlDate_' + now + '.xlsx',
-            index=False)
+        df = make_sheet(crp_cls, directory_name)  # 로드된 웹 요소들 긁어오기.
+        df.to_pickle(directory_name + '/' + crp_cls + '_' + str(
+            page_num) + '_from' + begin_date + 'to' + end_date + '_crawlDate_' + now + '.pkl')
+        # break  # for test
         check_more = goto_next_page()  # 다음 게시물 번호로 이동 일단 한페이지당 약 10분정도 소요되는 것으로 추정.
         # 코스피 관련 결과를 모두 긁는다면 199*10=33.1시간, 코스닥 관련 결과를 모두 긁는다면 299*10=49.8시간. 총 약 83시간=약 3일 5시간.
-        # break  # 테스트용.
 
 
 # if __name__ == '__main__':
