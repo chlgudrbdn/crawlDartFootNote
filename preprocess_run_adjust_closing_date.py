@@ -1,14 +1,15 @@
-
+"""
+해당 스크립트는 데이터 누수가 일어나지 않는 선에서 최종적으로 수정된 데이터를 바탕으로 다음 분기 재무지표를 예측하기 위해,
+마지막 수정된 본만 해당 날짜에 맞추는 코드. 원래는 preprocess_footnotes_data.py 선에서 해야할 일이나 나중에 해치우다보니 혼동되서 이렇게 처리.
+"""
 import pandas as pd
 from datetime import datetime, timedelta
 from dateutil.relativedelta import relativedelta
 from calendar import monthrange
-
 df3_2 = pd.read_pickle('filter3_2 have_foot_note_case.pkl')
 # df4_1 = df3_2[df3_2['dic_cls'] == 'NA']
 
 # df4_2 = pd.DataFrame()
-
 df3_2.sort_values(['crp_cd', 'rpt_nm', 'rcp_dt', 'rcp_no'], ascending=['True', 'True', 'True', 'True'], inplace=True)
 
 pre_crp_cd = ""
