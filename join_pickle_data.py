@@ -3,8 +3,9 @@ import os
 from datetime import datetime
 import gc
 
-def join_pickle_data(path_dir):
-    keyword = input('검색 및 저장할 키워드명을 입력하세요.')
+
+def join_pickle_data(path_dir, keyword):
+    # keyword = input('검색 및 저장할 키워드명을 입력하세요.')
     print('wait sec')
     # path_dir = input('엑셀 파일이 모인 곳의 경로를 복사 붙여넣기 하시오')
     # path_dir = os.path.dirname(os.path.realpath(__file__))  # 현 스크립트가 있는 경로
@@ -42,7 +43,7 @@ def join_pickle_data(path_dir):
     # df = df.drop_duplicates()
 
     # csv방식 : csv로 저장하면 쓰고 읽는데 오류는 안 생기지만 기가바이트 단위가 되어버린다.
-    # df.to_excel('total ' + path_dir.split('/')[-1] +' data collection.xlsx', index=False)
+    # df.to_csv('total ' + path_dir.split('/')[-1] +' data collection.xlsx', index=False)
     # df1 = pd.read_csv('total ' + path_dir.split('/')[-1] +' data collection.csv', dtype=str)
     # df.equals(df1)
 
@@ -62,6 +63,7 @@ def join_pickle_data(path_dir):
     # df.to_excel('crp_cd list.xlsx', index=False)
     # df.to_excel('crp_cd list 11to12.xlsx', index=False)  # 11년 12년 데이터에 한해서 추출할 때.
     return df
+
 
 '''
 * 데이터 품질 체크 결과 유의 할 사항

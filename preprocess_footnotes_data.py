@@ -57,16 +57,14 @@ def filtering_from2013to2018(df):  # 2013~2018만 필터링. 설령 13년에 올
     # df5 = df5.sort_values(by=['rcp_dt'], ascending=False)
     # save_with_xlsxwriter('filter from2013to2018.xlsx', df5)
     df['crp_cls'] = df.crp_cls.astype("category")
-
-
     df1_1.to_pickle('filter1_1 from2013to2018.pkl')
     return df1_1
 
 
-def filtering_ind_(df1_1):
+def filtering_ind_(df1_1):  # 기업 종목코드 리스트 추출.
     # df1_1 = pd.read_pickle('filter1_1 from2013to2018.pkl')
     df1_2 = df1_1['crp_cd'].drop_duplicates().to_frame()
-    df1_2.to_excel('crp_cd list.xlsx', index=False)  # 2062  #
+    df1_2.to_excel('crp_cd list.xlsx', index=False)  # 2062개
     return df1_2
 
 
@@ -84,11 +82,7 @@ def filtering_financial_industry(df1_1, df1_2):  # 금융 및 보험업 제거
 
 
 def filtering_less_text_data(df2_1):
-    # df2_1 = pd.read_pickle('F:/최형규/논문에 사용된 데이터 정리/filter2_1 no_fiance_K.pkl')
     df3_1 = df2_1[df2_1['foot_note'] == 'NA']
-    # df3_1 = df2_1[df2_1['foot_note'].isna()]
-    # df3_1 = df2_1[df2_1['foot_note'].isnan()]
-    # df3_1 = df2_1[pd.isnull(df2_1['foot_note'])]
     writer = pd.ExcelWriter('filter3_1 no_foot_note_case.xlsx', engine='xlsxwriter')  # import xlsxwriter 깔아야 사용 가능한 방법
     df3_1.to_excel(writer, 'Sheet1', index=False)
     writer.save()
@@ -153,8 +147,7 @@ def revision_disclose_use_or_just_not_resvision(df3_2):  # 만약 다음 공시 
             if cur_crp_cd == pre_crp_cd and cur_rpt_nm == pre_rpt_nm:
                 t_closing_date = cur_rpt_nm[cur_rpt_nm.find("(") + 1:cur_rpt_nm.find(")")].split('.')
                 tplus_closing_date = datetime(int(t_closing_date[0]), int(t_closing_date[1]),
-                                              monthrange(int(t_closing_date[0]), int(t_closing_date[1]))[
-                                                  1]) + relativedelta(months=3)
+                                              monthrange(int(t_closing_date[0]), int(t_closing_date[1]))[1]) + relativedelta(months=3)
 
                 cur_rcp_dt_li = cur_rcp_dt.split('.')
                 rpt_dt_datetime = datetime(int(cur_rcp_dt_li[0]), int(cur_rcp_dt_li[1]), int(cur_rcp_dt_li[2]))
@@ -202,11 +195,11 @@ def if_has_colFootnotes_then_replace(df4_1, df4_2):  # 연결재무제표가 있
     return df5_1, df5_2, df5_3, df5_4
 
 
-def divide_by_sector(df, filename, directory_name):
+def divide_by_sector(df, filename, directory_name):  # 산업별로 분류에 사용? # 사용 보류 코드
     # df = pd.read_pickle('filter5_2 alternate col to footnotes.pkl')
     # filename = 'filter5_2 alternate col to footnotes'
     # directory_name = './divide_by_sector'
-    if not os.path.exists(directory_name):  # bitcoin_per_date 폴더에 저장되도록, 폴더가 없으면 만들도록함.
+    if not os.path.exists(directory_name):
         os.mkdir(directory_name)
     sector_list = pd.read_excel('한국표준산업분류(10차)_표.xlsx', sheet_name='Sheet1')
     sector_list = list(sector_list['sector'])
@@ -216,7 +209,7 @@ def divide_by_sector(df, filename, directory_name):
         # sector = sector_list[0] # for test
         detailed_sector_num = list(sector_detailed[sector_detailed['sector'] == sector]['range'])
         detailed_sector_num = [str(x) for x in detailed_sector_num]
-        detailed_sector_regex = "|^".join(detailed_sector_num)
+        detailed_sector_regex = "|^".join(detailed_sector_num)  # 작성 의도가 잘 기억 안남. 다시 확인 요하는 코드.
         detailed_sector_regex = '^'+detailed_sector_regex
         df1 = df[df.ind_cd.str.contains(detailed_sector_regex, regex=True)]
         print(sector, df1.shape)
@@ -225,105 +218,7 @@ def divide_by_sector(df, filename, directory_name):
     return df_sector_list, sector_list
 
 
-def divide_by_specific_number(df, max_rows):
-    list_of_dfs = []
-    while len(df) > max_rows:
-        top = df[:max_rows]
-        # print(top.shape)
-        list_of_dfs.append(top)
-        df = df[max_rows:]
-        # print(df.shape)
-    else:
-        list_of_dfs.append(df)
-    return list_of_dfs
 
-
-def foot_note_pos_tagging(df6, morpheme_ref, how_to_pos_treat_as_feature):
-    # pos_tagged_lists = []
-    for index, row in df6.iterrows():
-        if index % 100 == 0:
-            print(index)
-        # print(index, row)  # for test
-        row['foot_note'] = re.sub('\n+', "\n", row['foot_note'])
-        row['foot_note'] = re.sub('\n ', "\n", row['foot_note'])
-        row['foot_note'] = re.sub(' {2,}', "", row['foot_note'])  # 구   분 같이 표에 명시된 경우가 있는데 이런 걸 제거하기 위함.
-        # before_text = "   "  # for test
-        # after_text = before_text  # for test
-        # after_text = re.sub('[/[\{\}\[\]\/?|\)*~`!\-_+<>@\#$%&\\\=\(\'\"]+', '0', before_text)  # for test
-        # after_text = re.sub(' {2,}', '0', before_text)  # for test
-        sentences = xplit('. ', '? ', '! ', '\n', '.\n')(row['foot_note'])  # 문장별 구분
-        morphemes = []
-        i = 0
-        for sentence in sentences:  # 이 절차를 미리하는 것은 사실 비효율이지만 에러 처리를 위해 임시방편으로 사용. 그리고 이걸 써야 한나눔의 글자수 제한도 피해갈 수 있다.
-            # print(sentence)  # for test
-            try:
-                if how_to_pos_treat_as_feature == 'use_only_morph':
-                    morphemes.extend(morpheme_ref.morphs(sentence))
-                elif how_to_pos_treat_as_feature == 'attach_tag_to_pos':
-                    # print('pos tagging start')  # for test
-                    pos_tag_pair_list = morpheme_ref.pos(sentence)
-                    # print(pos_tag_pair_list)  # for test
-                    tmp = []
-                    for word in pos_tag_pair_list:
-                        tmp.append(("/".join(word)))
-                    # print('tag result: ', tmp)  # for test
-                    morphemes.extend(tmp)
-                    del tmp
-                    del pos_tag_pair_list
-                elif how_to_pos_treat_as_feature == 'seperate_tag_and_pos':
-                    morphemes.extend(morpheme_ref.pos(sentence))  # 한쌍의 튜플로 이뤄진 리스트를 품사까지 하나의 feature로 취급하기 위한 작업
-            except Exception:
-                continue
-                print('error index', index, ' ', i, 'th sentence', sentence)
-            i += 1
-        df6.at[index, 'foot_note'] = morphemes
-        del morphemes
-        del sentences
-        # print(df6.at[index, 'foot_note'])
-        # df6.loc[index, 'foot_note'] = morphemes  # bug
-        # df6.loc[index].at['morpheme'] = morphemes  # bug
-        # pos_tagged_lists.append(morphemes)  # bug
-        # df6['morpheme'] = pos_tagged_lists  # bug
-    # print(df6['foot_note'])
-    # print(df6.info())
-    print('done')
-    return df6
-
-
-def test_pos_for_check(df6, morpheme, how_to_pos_treat_as_feature):
-    start_time = datetime.now()
-    print("start_time : ", start_time)
-    if morpheme == 'kkma':
-        morpheme_ref = Kkma()  # 꼬꼬마  # 오래걸린다. 제외.
-    elif morpheme == 'komoran':
-        morpheme_ref = Komoran()  # 코모란
-    elif morpheme == 'okt':
-        morpheme_ref = Okt()  # 오픈 코리아 텍스트
-    elif morpheme == 'hannanum':
-        morpheme_ref = Hannanum()  # 한나눔  # 띄어쓰기 처리수준이 낮긴한데 이점이 오히려 합성어가 많은 재무 도메인의 경우 의미가 있을 수 있어 보인다.  # 라고 생각했는데 오류 투성이다.
-    columns = ['rcp_no', 'dic_cls', 'dcm_no', 'col_dcm_no', 'consolidated_foot_note']
-    df6.drop(columns, inplace=True, axis=1)
-
-    directory_name = './divide_by_sector'
-    # filename = 'filter6 '+morpheme+'_'+how_to_pos_treat_as_feature+'.pkl'
-    df_list = divide_by_specific_number(df6, 10000)
-    del df6
-    # df_list_sector, sector_list = divide_by_sector(df6, filename, directory_name)
-    # for tmp_df, sector in zip(df_list_sector, sector_list):
-    print('divide done')
-    len_of_df_list = len(df_list)
-    for i in range(len_of_df_list):
-        tmp_df = df_list[0]  # 앞에서 하나씩 지우는 pop 같은 방식
-        tmp_df = foot_note_pos_tagging(tmp_df, morpheme_ref, how_to_pos_treat_as_feature)
-        tmp_df.to_pickle(directory_name + '/filter6 '+morpheme+'_'+how_to_pos_treat_as_feature+'_'+str(i)+'.pkl')
-        del tmp_df
-        del df_list[0]  # 앞에서 하나씩 지우는 pop 같은 방식
-        print("take time : {}".format(datetime.now() - start_time))
-        i += 1
-        gc.collect()
-        # 2번것 다 끝나면
-        # 파일 불러올땐 morpheme, how_to_pos_treat_as_feature로 걸러서 출력.
-    print("end time : {}".format(datetime.now()))
 
 
 def check_isnan_or_string(item):
@@ -335,8 +230,8 @@ def check_isnan_or_string(item):
     return check_nan
 
 
-def substitute_main():  # fnguide에서 긁어온 종속 변수 손보기.
-    path_dir = 'C:\\Users\\jin\\PycharmProjects\\crawlDartFootNote\\financial ratio for dependent variable retrived 2019_05_15'  # done (파일사이즈 문제와 전처리 편의를 위해 pickle로 저장하게 함.)
+def substitute_main():  # fnguide에서 긁어온 종속 변수 손보기. Main인데 이상하게 구멍난애들은 메우는 방식.
+    path_dir = 'C:\\Users\\lab515\\PycharmProjects\\crawlDartFootNote\\financial ratio for dependent variable retrived 2019_05_15'  # done (파일사이즈 문제와 전처리 편의를 위해 pickle로 저장하게 함.)
     file_df_list = []
     file_name_list = []
     for path, dirs, files in os.walk(path_dir):
@@ -373,18 +268,6 @@ def substitute_main():  # fnguide에서 긁어온 종속 변수 손보기.
         print('save done')
     # tmp_df.loc[30371].at['M000701020-PER(연율화)(배)']
     # tmp_df.loc[30372].at['M000701020-PER(연율화)(배)']
-
-
-def statical_analysis():
-    matched_quanti_data = pd.read_pickle('merged_FnGuide/quanti_eps_predict.pkl')
-    X = matched_quanti_data[['M000909001-영업활동으로인한현금흐름(천원)']]
-    # X = matched_quanti_data[['M000909001-영업활동으로인한현금흐름(천원)', 'M000909018-재무활동으로인한현금흐름(천원)', 'M000909015-투자활동으로인한현금흐름(천원)']]
-    y = matched_quanti_data['M000601003-수정EPS(원)']
-    X = sm.add_constant(X)
-    result = sm.OLS(np.asarray(y), X).fit()
-    print(result.rsquared)
-    # 요약결과 출력
-    print(result.summary())
 
 
 def match_fnguide_data_and_delete_redundant(df, quanti_data, file_name):  # t+1 종속변수와 t독립 변수 비교
@@ -611,10 +494,6 @@ def previous_research_with_svm(dataset, try_cnt):
     return over_random_state_try
 
 
-def xplit(*delimiters):
-    return lambda value: re.split('|'.join([re.escape(delimiter) for delimiter in delimiters]), value)
-
-
 def identity_tokenizer_with_komoran(sentences):
     morpheme_ref = Komoran()  # 코모란
     sentences = xplit('. ', '? ', '! ', '\n', '.\n')(sentences)  # 문장별 구분
@@ -738,52 +617,9 @@ def identity_tokenizer(text):
     return text
 
 
-def filter_nouns_already_tagged(valid_df_idx_list, matched_quanti_and_qual_data):
-    '''
-    file_df_list = []
-    file_name_list = []
-    for path, dirs, files in os.walk(path_dir):
-        for file in files:
-            if os.path.splitext(file)[1].lower() == '.pkl':
-                if 'komoran' in file.split(".")[0]:
-                    tmp_df = pd.read_pickle(path + "\\" + file)  # dtype=str option이 없으면 종목코드가 숫자로 처리됨.
-                    if not tmp_df.empty:
-                        print(file)
-                        file_name_list.append(file)
-                        file_df_list.append(tmp_df)
-                        del tmp_df
-                        gc.collect()
-    file_df_list = pd.concat(file_df_list, join='inner', axis=0)
-    file_df_list.to_pickle(path_dir + '\\filter6 komoran_attach_tag_to_pos.pkl')
-    del file_df_list
-    '''
-    '''
-    '''
-    path_dir = 'C:\\Users\\jin\\PycharmProjects\\crawlDartFootNote\\divide_by_sector'  # done (파일사이즈 문제와 전처리 편의를 위해 pickle로 저장하게 함.)
-    df = pd.read_pickle(path_dir + '\\filter6 komoran_attach_tag_to_pos.pkl')
-    # df = pd.read_pickle('./merged_FnGuide/quanti_qaul_eps_predict.pkl')
-    df = df.iloc[valid_df_idx_list]
-    tfidf = TfidfVectorizer(tokenizer=identity_tokenizer, lowercase=False, max_df=0.95, min_df=0)
-    tdm = sparse.csr_matrix(tfidf.fit_transform(list(df['foot_note'])))
-    sparse.save_npz('./merged_FnGuide/qual_matix.npz', tdm)
-
-    tdm = sparse.load_npz('./merged_FnGuide/qual_matix.npz')
-    scaler = StandardScaler()
-    quanti_scaled = scaler.fit_transform(matched_quanti_and_qual_data.values[:, 0:-1])
-    # quanti_scaled = np.insert(quanti_scaled, quanti_scaled.shape[1], list(df.values[:, -1]), axis=1)  # 종속변수는 그냥 따로 리턴하는게 속편하다.
-    quanti_sparse_matrix = csr_matrix(quanti_scaled.tolist())
-    X = hstack([tdm, quanti_sparse_matrix])
-    sparse.save_npz('./merged_FnGuide/dataset.npz', X)
-    '''
-    path_dir = 'C:\\Users\\jin\\PycharmProjects\\crawlDartFootNote\\divide_by_sector\\'
-    file_name = 'filter6 komoran_attach_tag_to_pos_6.pkl'
-    df = pd.read_pickle(path_dir + file_name)
-    # df.reset_index(inplace=True, drop=True)
-    for index, row in df.iterrows():
-        matching = [s for s in row['foot_note'] if ("/N") in s]
-        # print(matching)
-        df.loc[index, 'foot_note'] = matching
-    df.to_pickle(path_dir + file_name)
-    '''
-    y = matched_quanti_and_qual_data.values[:, -1]
-    return X, y  # 종속변수와 TDM과 quanti 데이터 합친 sparse matrix. 전자를 y, 후자를 X취급하면 그대로 학습이 가능.
+def filter_pos(df6, pos_tag_list):
+    for index, row in df6.iterrows():
+        # print(df6.loc[index, 'foot_note'])
+        df6.loc[index, 'foot_note'] = [word for word in row['foot_note'] if word.split('/')[-1] in pos_tag_list]
+        # print(df6.loc[index, 'foot_note'])
+    return df6

@@ -37,7 +37,7 @@ if __name__ == '__main__':  # 시간내로 하기 위해 멀티프로세싱 적�
 
     matched_quanti_and_qual_data, valid_df_idx_list = pfd.match_fnguide_data_and_delete_redundant(qual_ind_var, matched_quanti_data, data_set_file_name)
 
-    dataset, y = pfd.filter_nouns_already_tagged(valid_df_idx_list, matched_quanti_and_qual_data)
+    dataset, y = pfd.filter_pos(valid_df_idx_list, matched_quanti_and_qual_data)
     """
     # matched_quanti_and_qual_data = pd.read_pickle('./merged_FnGuide/quanti_qaul_eps_predict.pkl')
 
