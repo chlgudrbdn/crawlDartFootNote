@@ -58,11 +58,15 @@ if __name__ == '__main__':  # 시간내로 하기 위해 멀티프로세싱 적�
     # pool.join()
     # for index, row in df6.iterrows():
     #     df6.loc[index, 'foot_note'] = [s + ';' for s in df6.loc[index, 'foot_note'].split(';')]
+
+    # 특정 형태소만 쓰는건 tf-idf로 바꿀때만 유용
     df7 = pfd.filter_pos(df6, ['N;', 'P;', 'F;'])  # 한나눔은 체언, 용언, 외국어 말곤 딱히 쓸모있는 태그 분류는 하지 않는 것으로 보인다.
     del df6
     df7.to_pickle(path_dir + '/filter7 hannanum_filtered_pos.pkl')
-    """
 
+
+
+    """
     pre_crp_cd = ""
     pre_rpt_nm = ""
     # pre_rpt_dt = ""

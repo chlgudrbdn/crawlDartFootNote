@@ -1,6 +1,8 @@
 from sklearn.naive_bayes import MultinomialNB
 from sklearn.pipeline import Pipeline
 from sklearn.feature_extraction.text import TfidfVectorizer, HashingVectorizer, CountVectorizer
+import csv
+import numpy as np
 
 # scikit learn으로 다양한 종류의 모델을 만들어 보자.
 clf_1 = Pipeline([('vect', CountVectorizer()),
@@ -11,8 +13,6 @@ clf_3 = Pipeline([('vect', TfidfVectorizer()),
                   ('clf', MultinomialNB())])
 
 # 입력 데이터를 훈련 데이터와 테스트 데이터로 분해하자.
-import csv
-import numpy as np
 
 org_data = []
 org_label = []

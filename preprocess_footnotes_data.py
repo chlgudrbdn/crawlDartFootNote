@@ -218,9 +218,6 @@ def divide_by_sector(df, filename, directory_name):  # 산업별로 분류에 �
     return df_sector_list, sector_list
 
 
-
-
-
 def check_isnan_or_string(item):
     check_nan = True
     try:
@@ -271,22 +268,37 @@ def substitute_main():  # fnguide에서 긁어온 종속 변수 손보기. Main�
 
 
 def match_fnguide_data_and_delete_redundant(df, quanti_data, file_name):  # t+1 종속변수와 t독립 변수 비교
+    file_name = 'quanti_qaul_eps_predict.pkl' # for test
     result_df = pd.DataFrame()
     valid_df_idx_list = []
     for index, row in df.iterrows():
         rpt_nm = row['rpt_nm']
         t_closing_date = rpt_nm[rpt_nm.find("(")+1:rpt_nm.find(")")].split('.')
         t_closing_date = datetime(int(t_closing_date[0]), int(t_closing_date[1]), 1)  # t+1이 아니다. 오는 값은 꽉차있고 이미 매칭된 정량+종속 변수 값이다. 정량변수의 식별 정보와 맞춰주면 된다.
-        tplus_data = quanti_data[(quanti_data['Symbol'] == str(row['crp_cd'])) &
-                                 (quanti_data['결산월'] == t_closing_date.month) &
+        rpt = rpt_nm.split()
+        if rpt[0] == '반기보고서':
+            t_quarter = '2Q'
+        elif rpt[0] == '사업보고서':
+            t_quarter = '4Q'
+        elif t_closing_date.month == 3:
+            # 주기와 맞는다는 보장은 없다. 이게 맞길 바래야함.
+            t_quarter = '1Q'
+        elif t_closing_date.month == 9:
+            t_quarter = '3Q'
+        else:  # 혹시 모르니 일단 예외처리.
+            print('exeception closing date', index)
+            print('month ', t_closing_date.month)
+        tplus_data = quanti_data[(quanti_data['Symbol'] == 'A'+str(row['crp_cd'])) &
+                                 # (quanti_data['결산월'] == t_closing_date.month) &
+                                 (quanti_data['주기'] == t_quarter) &
                                  (quanti_data['회계년'] == t_closing_date.year)]
-        # tplus_data.drop(['rpt_nm', 'Symbol', '결산월', '회계년'], inplace=True, axis=1)
         if tplus_data.shape[0] > 1:
-            print(tplus_data)
+            print(tplus_data)  # 없겠지만 예외처리를 위함.
         if tplus_data.empty:
+            print('empty ', index)
             result_df = result_df.append(pd.Series(), ignore_index=True)
             continue
-        valid_df_idx_list.append(index)  # 최종적로는 이것만 있으면 된다. # 일단 적절한 값이 없는 경우 알아서 생략되도록 앞의 코드에서 처리.
+        valid_df_idx_list.append(index)  # 최종적으로는 매칭에 이것만 있으면 된다. # 일단 적절한 값이 없는 경우 알아서 생략되도록 앞의 코드에서 처리.
         result_df = result_df.append(tplus_data, ignore_index=True)
     df.reset_index(drop=True, inplace=True)
     result_df.reset_index(drop=True, inplace=True)
@@ -323,42 +335,61 @@ def match_fnguide_data_and_delete_redundant(df, quanti_data, file_name):  # t+1 
     return df, valid_df_idx_list
 
 
-def match_fnguide_data_among_them(quanti_ind_var, quanti_dep_var, keyword, file_name):
-    # df1 = pd.read_excel('C:\\Users\\jin\\PycharmProjects\\crawlDartFootNote\\previous research independant variable\\about_EPS_independant_var.xlsx', dtype=object, sheet_name='Sheet1')
-    # df2 = pd.read_excel('C:\\Users\\jin\\PycharmProjects\\crawlDartFootNote\\financial ratio for dependent variable retrived 2019_05_15\\EPS_rawData.xlsx', dtype=object, sheet_name='Sheet1')
+def match_fnguide_data_among_them(quanti_ind_var, dep_vars, dep_var, ind_var, file_name):
+    # quanti_ind_var = pd.read_excel('C:\\Users\\jin\\PycharmProjects\\crawlDartFootNote\\previous research independant variable\\about_EPS_independant_var.xlsx', dtype=object, sheet_name='Sheet1')
+    # dep_var = pd.read_excel('C:\\Users\\jin\\PycharmProjects\\crawlDartFootNote\\financial ratio for dependent variable retrived 2019_05_15\\EPS_rawData.xlsx', dtype=object, sheet_name='Sheet1')
     # keyword = '수정EPS\(원\)'
-    # print(quanti_ind_var.columns)
-    # print(quanti_dep_var.columns)
-    quanti_dep_var = quanti_dep_var.drop(columns=list(quanti_dep_var.loc[:, quanti_dep_var.columns.str.contains('^주기')].columns))  # 주기는 불필요하니 제거
-    quanti_dep_var = pd.concat([quanti_dep_var.loc[:, ['Symbol', 'Name', '결산월', '회계년']], quanti_dep_var.loc[:, quanti_dep_var.columns.str.contains(keyword)]], axis=1)
-    quanti_dep_var = quanti_dep_var.replace(0, np.nan)  # 가끔 데이터가 없는데 0으로 채워진 경우는 그냥 이렇게 한다. 어차피 데이터가 없을게 뻔해서 의미는 없지만 혹시 모르니까.
-    quanti_dep_var.dropna(thresh=5, inplace=True)  # 식별 위한 정보를 제외한 것이 없는 경우. 어차피 이게 없으면 아무것도 안되므로.
+    # file_name = ''
+    identifier = ['Symbol', 'Name', '결산월', '회계년', '주기']
+    dep_vars = pd.concat([dep_vars.loc[:, identifier],
+                         dep_vars.loc[:, dep_vars.columns.str.contains(dep_var)]], axis=1)  # 일단 폼은 유지하되 필요한 변수 하나만 떼다 쓰기 위함.
+    # dep_vars = dep_vars.replace(0, np.nan)  # 가끔 데이터가 없는데 0으로 채워진 경우는 그냥 이렇게 한다. 어차피 데이터가 없을게 뻔해서 의미는 없지만 혹시 모르니까. 특히 거래가 없는 경우. # regression이라면 이 코드가 필요하지만 classification엔 필요 없는 일이었다. 0,1,2로 클래스가 나뉘는 마당에.
+    dep_vars.dropna(thresh=6, inplace=True)  # 식별 위한 정보를 제외한 것이 없는 경우. 어차피 이게 없으면 아무것도 안되므로.
+    # print(dep_var.info())
 
     # print(quanti_dep_var.columns)
-
-    quanti_ind_var = quanti_ind_var.drop(columns=list(quanti_ind_var.loc[:, quanti_ind_var.columns.str.contains('^주기')].columns))  # 주기는 불필요하니 제거
+    # print('ind_var : ', ind_var)
+    identifier.extend(ind_var)
+    # print('new ind_var : ', identifier)
+    # quanti_ind_var = quanti_ind_var.drop(columns=list(quanti_ind_var.loc[:, quanti_ind_var.columns.str.contains('^주기')].columns))  # 주기는 불필요하니 제거
+    quanti_ind_var = quanti_ind_var[identifier]
+    print(quanti_ind_var.shape)
     quanti_ind_var = quanti_ind_var.replace(0, np.nan)  # 가끔 데이터가 없는데 0으로 채워진 경우는 그냥 이렇게 한다. 어차피 데이터가 없을게 뻔해서 의미는 없지만 혹시 모르니까.
-    quanti_ind_var.dropna(thresh=5, inplace=True)  # 식별 위한 정보를 제외한 것이 없는 경우. 어차피 이게 없으면 아무것도 안되므로.
+    quanti_ind_var.dropna(thresh=len(identifier), inplace=True)  # 식별 위한 정보를 제외한 것이 없는 경우. 어차피 이게 없으면 아무것도 안되므로.
     # print(quanti_ind_var.columns)
-
-    result_df = pd.DataFrame()
+    print('quanti_ind_var.info() : ', quanti_ind_var.shape)
+    # print(dep_var)
+    # result_df = pd.DataFrame()
     for index, row in quanti_ind_var.iterrows():
-        tplus_closing_date = datetime(int(row['회계년']), int(row['결산월']), 1) + relativedelta(months=3)
-        tplus_data = quanti_dep_var[(quanti_dep_var['Symbol'] == row['Symbol']) &
-                                    (quanti_dep_var['결산월'] == tplus_closing_date.month) &
-                                    (quanti_dep_var['회계년'] == tplus_closing_date.year)]
-        if tplus_data.shape[0] > 1:  # 중복된 월, 일의 데이터 없는 문제 확인.
-            print(tplus_data)  # 일단 미리 없애놨으니 나타날린 없지만 그래도 한다.
+        # print(index)
+        tplus_quarter = str(int(row['주기'][0])+1)+'Q'   # 결산월 보다 쿼터 쪽이 신뢰도 있음
+        if tplus_quarter == '5Q':  # tplus_quarter가 원래는 4분기라 다음년도 1분기라면
+            tplus_year = int(row['회계년']) + 1   # 결산월 보다 쿼터 쪽이 신뢰도 있음
+            tplus_quarter = '1Q'
+        else:
+            tplus_year = int(row['회계년'])
+        tplus_data = dep_vars[(dep_vars['Symbol'] == row['Symbol'])
+                              & (dep_vars['회계년'] == tplus_year)
+                              & (dep_vars['주기'] == tplus_quarter)]
+        if tplus_data.shape[0] > 1:  # 중복된 분기의 데이터 없는 문제 확인.
+            print('tplus_data :', tplus_data)  # 일단 미리 없애놨으니 나타날린 없지만 그래도 체크.
         if tplus_data.empty:
-            result_df = result_df.append(pd.Series(), ignore_index=True)  # 매칭하는 날짜는 있는데 비었다면 빈칸으로 채우고 넘어간다.
+            # result_df = result_df.append(pd.Series(), ignore_index=True)  # 매칭하는 날짜는 있는데 비어있는 경우 일단 빈칸으로 채우고 넘어간다.
+            quanti_ind_var.loc[index, dep_var] = np.nan
+            print('empty', index)
+            # print(row)
             continue
-        result_df = result_df.append(tplus_data, ignore_index=True)  # 찾은 결과를 한줄씩 붙인뒤 나중에 옆으로 붙일 예정.
-    result_df = result_df.drop(columns=['Symbol', 'Name', '결산월', '회계년'])  # 종속변수 쪽 식별 정보는 필요 없음.
-    result_df.reset_index(drop=True, inplace=True)
-    quanti_ind_var.reset_index(drop=True, inplace=True)
-    quanti_ind_var = quanti_ind_var.drop(columns=['Name'])  # 그냥 종목번호보다 보기좋아서 냅둔거라. 지워도 상관없음.
+        # result_df = result_df.append(tplus_data, ignore_index=True)  # 찾은 결과를 한줄씩 붙인뒤 나중에 옆으로 붙일 예정.
+        # print('tplus_data : ', tplus_data)
+        # print('tplus_data : ', tplus_data[dep_var].iloc[0])
+        quanti_ind_var.loc[index, dep_var] = tplus_data[dep_var].iloc[0]  # ?
 
-    quanti_ind_var = pd.concat([quanti_ind_var, result_df], axis=1)
+    # result_df = result_df.drop(columns=['Symbol', 'Name', '결산월', '회계년'])  # 종속변수 쪽 식별 정보는 필요 없음.
+    # result_df.reset_index(drop=True, inplace=True)
+    # quanti_ind_var.reset_index(drop=True, inplace=True)
+    # quanti_ind_var = quanti_ind_var.drop(columns=['Name'])  # 그냥 종목번호보다 보기좋아서 냅둔거라. 지워도 상관없음.
+
+    # quanti_ind_var = pd.concat([quanti_ind_var, result_df], axis=1)
     quanti_ind_var.dropna(inplace=True)  # 이전 단계에서 걸렀을 가능성이 높지만 그래도 1~2개 없는 경우를 거르기 위함.
 
     # directory_name = 'merged_FnGuide ind_var/'
@@ -369,9 +400,12 @@ def match_fnguide_data_among_them(quanti_ind_var, quanti_dep_var, keyword, file_
     if not os.path.exists(directory_name):  # bitcoin_per_date 폴더에 저장되도록, 폴더가 없으면 만들도록함.
         os.mkdir(directory_name)
     # np.save('./merged_FnGuide/'+file_name, quanti_ind_var.values)
+    print(quanti_ind_var.iloc[:, 5:].astype('float'))
     quanti_ind_var.to_pickle(directory_name+'/'+file_name)
-
     print(quanti_ind_var.columns)
+    print(quanti_ind_var.shape)
+    print(quanti_ind_var.info())
+
     return quanti_ind_var  # 다음에 쓰려고 ndarray로 반환하지 않음.
 
 
@@ -397,10 +431,8 @@ def equ_var_test_and_unpaired_t_test(x1, x2):  # 모든 조합으로 독립표�
             compare_mean(x1, x2)
         else:
             print("two sample mean is same h0 not rejected")
-# from sklearn.preprocessing import MinMaxScaler
-#
-# dataset = scaler.fit_transform(dataset)
-# trainPredict = scaler.inverse_transform(trainPredict)
+
+
 def nested_cv(X, y, inner_cv, outer_cv, parameter_grid):
     outer_scores = []
 
@@ -494,38 +526,8 @@ def previous_research_with_svm(dataset, try_cnt):
     return over_random_state_try
 
 
-def identity_tokenizer_with_komoran(sentences):
-    morpheme_ref = Komoran()  # 코모란
-    sentences = xplit('. ', '? ', '! ', '\n', '.\n')(sentences)  # 문장별 구분
-    morphemes = []
-    # i = 0
-    for sentence in sentences:  # 이 절차를 미리하는 것은 사실 비효율이지만 에러 처리를 위해 임시방편으로 사용. 그리고 이걸 써야 한나눔의 글자수 제한도 피해갈 수 있다.
-        # print(sentence)  # for test
-        try:
-            morphemes.extend(morpheme_ref.nouns(sentence))
-            """
-            if how_to_pos_treat_as_feature == 'use_only_morph':
-                morphemes.append(morpheme_ref.morphs(sentence))
-            elif how_to_pos_treat_as_feature == 'attach_tag_to_pos':
-                # print('pos tagging start')  # for test
-                # pos_tag_pair_list = morpheme_ref.pos(sentence)
-                pos_tag_pair_list = morpheme_ref.nouns(sentence)
-                # print(pos_tag_pair_list)  # for test
-                tmp = []
-                for word in pos_tag_pair_list:
-                    tmp.append(("/".join(word)))
-                # print('tag result: ', tmp)  # for test
-                morphemes.append(tmp)
-                del tmp
-                del pos_tag_pair_list
-            elif how_to_pos_treat_as_feature == 'seperate_tag_and_pos':
-                morphemes.append(morpheme_ref.pos(sentence))  # 한쌍의 튜플로 이뤄진 리스트를 품사까지 하나의 feature로 취급하기 위한 작업
-            """
-        except Exception:
-            continue
-            # print('error index', index, ' ', i, 'th sentence', sentence)
-        # i += 1
-    return morphemes
+def xplit(*delimiters):
+    return lambda value: re.split('|'.join([re.escape(delimiter) for delimiter in delimiters]), value)
 
 
 def nested_cv_multiprocess(X, y, inner_cv, outer_cv, parameter_grid, seed):
@@ -622,4 +624,42 @@ def filter_pos(df6, pos_tag_list):
         # print(df6.loc[index, 'foot_note'])
         df6.loc[index, 'foot_note'] = [word for word in row['foot_note'] if word.split('/')[-1] in pos_tag_list]
         # print(df6.loc[index, 'foot_note'])
+
+        # alternate try
+        # for words in row['foot_note']:  # foot_note열은 리스트 형태 원소가 있다고 가정.
+        #     if words.split('/')[-1] in pos_tag_list:
+        #         df6.loc[index, 'foot_note'] = word
     return df6
+
+
+def filter_number(df):  # 한나눔의 경우 숫자는 별도로 태깅하지 않는다. 이 숫자를 달리 의미 있게 할 방법이 tf-idf에는 없으므로 제거
+    for index, row in df.iterrows():
+        new_words = []
+        for word in row['foot_note']:  # list형을 전제로 함.
+            try:
+                float(word.split('/')[0].replace(",", ""))
+            except ValueError:
+                new_words.append(word)
+                pass
+        print(new_words)
+        df.at[index, 'foot_note'] = new_words
+    return df
+
+
+def add_one_hot(df, col_name):
+    df = pd.concat([df, pd.get_dummies(df[col_name], dummy_na=False, prefix=col_name)], axis=1)
+    df.drop([col_name], axis=1, inplace=True)
+    return df
+
+
+def add_one_hot_with_ind_cd(df):
+    sector_detailed = pd.read_excel('한국표준산업분류(10차)_표.xlsx', sheet_name='Sheet2', dtype=object)
+    print(sector_detailed.info())
+    for index, row in sector_detailed.iterrows():
+        tmp = df[df.ind_cd.str.contains('^'+str(row['range']))]
+        for idx, r in tmp.iterrows():
+            df.loc[idx, 'ind'] = row['sector']
+    df = add_one_hot(df, 'ind')
+    df.drop(['ind_cd'], axis=1, inplace=True)
+    return df
+
