@@ -14,10 +14,11 @@ import gc
 # https://replet.tistory.com/70?category=667742 에서 사용해서 import하는 패키지
 import statsmodels.api as sm
 from sklearn.feature_extraction.text import CountVectorizer
+from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.feature_extraction.text import TfidfTransformer
+import scipy.sparse
 from sklearn.pipeline import Pipeline
 from sklearn.model_selection import train_test_split
-from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics import mean_squared_error
 from sklearn.model_selection import cross_val_score
 from math import sqrt
@@ -29,8 +30,13 @@ from sklearn.model_selection import ParameterGrid
 from sklearn.metrics import make_scorer
 from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import GridSearchCV
-# from thundersvm import *
-from sklearn.svm import SVR
+from sklearn.metrics import accuracy_score
+from sklearn.metrics import confusion_matrix
+from sklearn.metrics import f1_score
+# from sklearn.svm import SVR
+from sklearn.svm import SVC
+from sklearn.ensemble import BaggingClassifier
+
 
 # df.loc[i - 1, 'crp_cls'] = crp_cls  # 법인유형(유가증권Y, 코스닥K)
 # df.loc[i - 1, 'crp_nm'] = crp_nm  # 공시대상회사(종목명)
@@ -267,58 +273,57 @@ def substitute_main():  # fnguide에서 긁어온 종속 변수 손보기. Main�
     # tmp_df.loc[30372].at['M000701020-PER(연율화)(배)']
 
 
-def match_fnguide_data_and_delete_redundant(df, quanti_data, file_name):  # t+1 종속변수와 t독립 변수 비교
-    file_name = 'quanti_qaul_eps_predict.pkl' # for test
+def xplit(*delimiters):
+    return lambda value: re.split('|'.join([re.escape(delimiter) for delimiter in delimiters]), value)
+
+
+def match_quanti_and_qual_data(qual_ind_var, quanti_ind_var, file_name):  # t+1 종속변수와 t독립 변수 비교
+    file_name = 'quanti_qaul_per_dataset.pkl'  # for test
     result_df = pd.DataFrame()
     valid_df_idx_list = []
-    for index, row in df.iterrows():
+    for index, row in qual_ind_var.iterrows():
         rpt_nm = row['rpt_nm']
         t_closing_date = rpt_nm[rpt_nm.find("(")+1:rpt_nm.find(")")].split('.')
-        t_closing_date = datetime(int(t_closing_date[0]), int(t_closing_date[1]), 1)  # t+1이 아니다. 오는 값은 꽉차있고 이미 매칭된 정량+종속 변수 값이다. 정량변수의 식별 정보와 맞춰주면 된다.
+        t_year = int(t_closing_date[0])
+        t_month = int(t_closing_date[1])
+
         rpt = rpt_nm.split()
-        if rpt[0] == '반기보고서':
+        if rpt[0] == '반기보고서' and t_month == 6:
             t_quarter = '2Q'
-        elif rpt[0] == '사업보고서':
+        elif rpt[0] == '사업보고서' and t_month == 12:
             t_quarter = '4Q'
-        elif t_closing_date.month == 3:
-            # 주기와 맞는다는 보장은 없다. 이게 맞길 바래야함.
+        elif rpt[0] == '분기보고서' and t_month == 3:  # 주기와 맞는다는 보장은 없다. 이게 맞길 바래야함.
             t_quarter = '1Q'
-        elif t_closing_date.month == 9:
+        elif rpt[0] == '분기보고서' and t_month == 9:
             t_quarter = '3Q'
-        else:  # 혹시 모르니 일단 예외처리.
-            print('exeception closing date', index)
-            print('month ', t_closing_date.month)
-        tplus_data = quanti_data[(quanti_data['Symbol'] == 'A'+str(row['crp_cd'])) &
+        else:  # 혹시 모르니 일단 예외처리.  # 직접 확인한 결과 612건. 예를들어 4월부터 9월까지를 반기로 치는 중소기업이 있었다(000220). 무시해도 좋다고 판단함.
+            print('exeception idx:', index, ' month:', t_month, ' rpt_nm:', rpt_nm)
+            t_quarter = ''
+            result_df = result_df.append(pd.Series(), ignore_index=True)
+            continue
+        tplus_data = quanti_ind_var[(quanti_ind_var['Symbol'] == 'A'+str(row['crp_cd'])) &
                                  # (quanti_data['결산월'] == t_closing_date.month) &
-                                 (quanti_data['주기'] == t_quarter) &
-                                 (quanti_data['회계년'] == t_closing_date.year)]
+                                 (quanti_ind_var['주기'] == t_quarter) &
+                                 (quanti_ind_var['회계년'] == t_year)]
         if tplus_data.shape[0] > 1:
-            print(tplus_data)  # 없겠지만 예외처리를 위함.
+            print('duplicated ', index)  # 없겠지만 중복이 생길 경우 예외처리를 위함.
+
         if tplus_data.empty:
-            print('empty ', index)
+            print('empty ', index)  # 약 2260건. 필연적으로 어딘가 비면 생길 수 밖에 없는 문제다.
             result_df = result_df.append(pd.Series(), ignore_index=True)
             continue
         valid_df_idx_list.append(index)  # 최종적으로는 매칭에 이것만 있으면 된다. # 일단 적절한 값이 없는 경우 알아서 생략되도록 앞의 코드에서 처리.
         result_df = result_df.append(tplus_data, ignore_index=True)
-    df.reset_index(drop=True, inplace=True)
+    qual_ind_var.reset_index(drop=True, inplace=True)
     result_df.reset_index(drop=True, inplace=True)
-    df = pd.concat([df, result_df], axis=1)
-    columns = ['crp_cd', 'rpt_nm', 'Symbol', '결산월', '회계년']
-    # columns = ['crp_cd', 'ind_cd', 'crp_cls', 'crp_nm', 'rpt_nm', 'rcp_no', 'dic_cls', 'dcm_no', 'col_dcm_no', 'consolidated_foot_note', 'rcp_dt',
-    #            'Symbol', '결산월', '회계년']
-    # df5_2의 컬럼 목록 ['crp_cd', 'ind_cd', 'crp_cls', 'crp_nm', 'rpt_nm', 'rcp_no', 'dic_cls', 'dcm_no', 'col_dcm_no', 'foot_note', 'consolidated_foot_note', 'rcp_dt']
-    # 현시점에서 산업코드 나누는건 의미 없고(사실 절반이 제조업이라 더더욱), 종목코드는 중복이라 Symbol 삭제,
-    # rcp_dt는 이전 단계에 써먹어야 했음, crp_nm은 어차피 종목코드로 대체(검색 편의를 위해 남겼을 뿐),
-    # 결산월과 회계년은 이미 t+1과 t0를 맞추는데 사용.
-    # rpt_nm은 좀 애매한데 일단 분기 보고서인지 반기보고서인지 나눠서 제어할 필요가 있다고 보고 남김.
-    df.drop(columns, inplace=True, axis=1)
-    df.dropna(inplace=True)  # 사실 별 의미 없는 짓이다.
+    matched_quanti_and_qual_data = pd.concat([qual_ind_var, result_df], axis=1)
+
     directory_name = './merged_FnGuide'
     if not os.path.exists(directory_name):  # bitcoin_per_date 폴더에 저장되도록, 폴더가 없으면 만들도록함.
         os.mkdir(directory_name)
-    df.to_pickle(directory_name+'/'+file_name)
+    matched_quanti_and_qual_data.to_pickle(directory_name+'/'+file_name)
     print(len(valid_df_idx_list))
-    print(df.shape)
+    print(matched_quanti_and_qual_data.shape)
     # np.save('./merged_FnGuide/'+file_name, df.values)
     # for test
     # directory_name = 'merged_FnGuide'
@@ -332,7 +337,7 @@ def match_fnguide_data_and_delete_redundant(df, quanti_data, file_name):  # t+1 
     # df.to_pickle(directory_name+'/merged_FnGuide '+file_name)
     # print(df1.loc[0])
     # for test
-    return df, valid_df_idx_list
+    return matched_quanti_and_qual_data, valid_df_idx_list
 
 
 def match_fnguide_data_among_them(quanti_ind_var, dep_vars, dep_var, ind_var, file_name):
@@ -415,7 +420,7 @@ def match_fnguide_data_among_them(quanti_ind_var, dep_vars, dep_var, ind_var, fi
 def equ_var_test_and_unpaired_t_test(x1, x2):  # 모든 조합으로 독립표본 t-test 실시. 일단 다른 변수로 감안.(같다면 등분산 t-test라고 생각)
     # 등분산성 확인. 가장 기본적인 방법은 F분포를 사용하는 것이지만 실무에서는 이보다 더 성능이 좋은 bartlett, fligner, levene 방법을 주로 사용.
     # https://datascienceschool.net/view-notebook/14bde0cc05514b2cae2088805ef9ed52/
-    if stats.bartlett(x1, x2).pvalue < 0.05:
+    if stats.levene(x1, x2).pvalue < 0.05:  # 이보다 적으면 등분산.
         tTestResult = stats.ttest_ind(x1, x2, equal_var=True)
         print("The t-statistic and p-value assuming equal variances is %.3f and %.3f." % tTestResult)
         # 출처: http: // thenotes.tistory.com / entry / Ttest - in -python[NOTES]
@@ -449,22 +454,23 @@ def nested_cv(X, y, inner_cv, outer_cv, parameter_grid):
             # 안쪽 교차 검증의 점수를 기록합니다
             cv_scores = []
             # inner_cv의 분할을 순회하는 for 루프
-            for inner_train, inner_test in inner_cv.split(
-                    X[training_samples], y[training_samples]):
+            for inner_train, inner_test in inner_cv.split(X[training_samples], y[training_samples]):
                 # 훈련 데이터와 주어진 매개변수로 분류기를 만듭니다
-                reg = SVR(**parameters)
+                reg = SVC(**parameters)
                 reg.fit(X[inner_train], y[inner_train])
                 # 검증 세트로 평가합니다
-                score = reg.score(X[inner_test], y[inner_test])  # SVR의 기본 성능 평가 척도는 R^2이다. 보통은 0~1(성능이 너무 구리면 마이너스로도 간다)
+                score = reg.score(X[inner_test], y[inner_test])  # SVC의 기본 성능 평가 척도는 정확도이다. 보통은 0~1
                 cv_scores.append(score)
             # 안쪽 교차 검증의 평균 점수를 계산합니다
+            print('inner cv_scores : ', cv_scores)
             mean_score = np.mean(cv_scores)
+            print('mean cv_score : ', mean_score)
             if mean_score > best_score:
                 # 점수가 더 높은면 매개변수와 함께 기록합니다
                 best_score = mean_score
                 best_params = parameters
         # 바깥쪽 훈련 데이터 전체를 사용해 분류기를 만듭니다
-        reg = SVR(**best_params)
+        reg = SVC(**best_params)
         print(best_params)
         reg.fit(X[training_samples], y[training_samples])
         # 테스트 세트를 사용해 평가합니다
@@ -502,18 +508,20 @@ def previous_research_with_svm(dataset, try_cnt):
     param_grid = [{'kernel': ['rbf'],
                    'gamma': ['auto']}
                   ]
-
     over_random_state_try = []
     scaler = StandardScaler()
     for seed in range(try_cnt):
         # seed = 42  # for test
         kf = KFold(n_splits=5, random_state=seed, shuffle=True)
         average_kfold_train_test_score_with_highest_hyperparam_of_train_val = \
-            nested_cv_multiprocess(scaler.fit_transform(dataset[:, 3:-1]), dataset[:, -1].ravel(), kf, kf, param_grid)
+            nested_cv_multiprocess(scaler.fit_transform(dataset[:, :-1]),
+                                   dataset[:, -1].ravel(),
+                                   kf, kf, param_grid, try_cnt)  # 최소 3*5*5*30=225회
             # nested_cv(scaler.fit_transform(dataset[:, 3:-1]), dataset[:, -1].ravel(), kf, kf, ParameterGrid(param_grid))
         # X_train, X_test, y_train, y_test = \
         #     train_test_split(df.iloc[:, 4:-1], df.iloc[:, -1], test_size=0.2, random_state=seed)  # 제대로 처리됐다면 ['Symbol', 'Name', '결산월', '회계년'] 순이 될 것.
         # best_score = 0
+        print(' try :', seed, " ", average_kfold_train_test_score_with_highest_hyperparam_of_train_val)
         over_random_state_try.append(average_kfold_train_test_score_with_highest_hyperparam_of_train_val)
         # print(rms)
         # if score > best_score:
@@ -526,49 +534,51 @@ def previous_research_with_svm(dataset, try_cnt):
     return over_random_state_try
 
 
-def xplit(*delimiters):
-    return lambda value: re.split('|'.join([re.escape(delimiter) for delimiter in delimiters]), value)
-
-
 def nested_cv_multiprocess(X, y, inner_cv, outer_cv, parameter_grid, seed):
     outer_scores = []
+    f1_scores = []
     print(X.shape)
     # outer_cv의 분할을 순회하는 for 루프
     # (split 메소드는 훈련과 테스트 세트에 해당하는 인덱스를 리턴합니다)
     # X = X.toarray()  # 늦어질 뿐이다
-    """
     # 정량적인 데이터만 쓸 경우
+    start_time = datetime.now()
+    print("start_time : ", start_time)
     for training_samples, test_samples in outer_cv.split(X, y):
-        # 최적의 매개변수를 찾습니다
-        grid_search = GridSearchCV(SVR(), parameter_grid, cv=inner_cv, n_jobs=-1)
-        grid_search.fit(X[training_samples], y[training_samples])
-
+        # 최적의 매개변수를 찾습니다  # 파라미터 세트 하나만 시도해보는거니 생략. 결국 5-fold 30번.
+        """
+        if X.shape[1] < 1000:
+            grid_search = GridSearchCV(SVC(), parameter_grid, cv=inner_cv, n_jobs=-1)
+            grid_search.fit(X[training_samples], y[training_samples])
+        # 정성적인데이터도 쓸 경우  # 그냥 파라미터 하나만 쓸 경우.
+        else:
+            X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=seed)
+            print('split done')
+            svc = SVC(kernel='rbf', gamma='auto')
+            svc.fit(X_train, y_train)
         # 바깥쪽 훈련 데이터 전체를 사용해 분류기를 만듭니다
         print("최적 매개변수:", grid_search.best_params_)
         print("최고 교차 검증 점수: {:.5f}".format(grid_search.best_score_))
-        reg = SVR(**grid_search.best_params_)
-        reg.fit(X[training_samples], y[training_samples])
+        """
+        # cls = SVC(**grid_search.best_params_)
+        svc = SVC(kernel='rbf', gamma='auto')
+        cls = BaggingClassifier(base_estimator=svc, n_estimators=8, n_jobs=-1, max_samples=1.0 / 8.0,)
+        cls.fit(X[training_samples], y[training_samples])
         # 테스트 세트를 사용해 평가합니다
         # outer_scores.append(reg.score(X[test_samples], y[test_samples]))
-        print('R^2 of this param : ', reg.score(X[test_samples], y[test_samples]))
-        outer_scores.append(sqrt(mean_squared_error(reg.predict(X[test_samples]), y[test_samples])))
+        pred = cls.predict(X[test_samples])
+        # print('mean acurracy of this param on testset : ', cls.score(X[test_samples], y[test_samples]))
+        mean_acc = accuracy_score(y[test_samples], pred)
+        f1 = f1_score(y[test_samples], pred, average='macro')
+        print('mean acurracy of this param on testset :', mean_acc)
+        print('confusion acurracy of this param on testset :\n', confusion_matrix(y[test_samples], pred))
+        print('f1 score of this param on testset :', f1)
+        outer_scores.append(mean_acc)
+        f1_scores.append(f1)
+        print("take time : {}".format(datetime.now() - start_time))
+        # print('outer_scores: ', outer_scores)
         #, sqrt(mean_squared_error(reg.predict(X[test_samples]), y[test_samples]))))  # 이중 리스트로, 첫번째는 r^2 두번째는 rmse
-    """
-
-    # 정성적인데이터도 쓸 경우
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=seed)
-    print('split done')
-    # score = cross_val_score(SVR(kernel='rbf', gamma='auto'), X_train, y_train, cv=5)
-    # print("최고 교차 검증 점수: ", score)
-    svr = SVR(kernel='rbf', gamma='auto', C=1.0, epsilon=0.1)
-    svr.fit(X_train, y_train)
-    print('R^2 score : ', svr.score(X_test, y_test))
-    outer_scores.append(sqrt(mean_squared_error(svr.predict(X_test), y_test)))
-    print('outer_scores: ', outer_scores)
-
-
     '''
-
     for training_samples, test_samples in outer_cv.split(X, y):
         # 최적의 매개변수를 찾습니다
         # grid_search = GridSearchCV(SVR(), parameter_grid, cv=inner_cv, n_jobs=-1)
@@ -586,8 +596,7 @@ def nested_cv_multiprocess(X, y, inner_cv, outer_cv, parameter_grid, seed):
         outer_scores.append(sqrt(mean_squared_error(reg.predict(X.todok()[test_samples.tolist()]), y.todok()[test_samples.tolist()])))
     print('outer_scores: ', outer_scores)
     '''
-
-    return np.mean(outer_scores)  # 전체 데이터 셋 대상으로 한 test의 예측값.
+    return np.mean(outer_scores), np.mean(f1_scores)  # 전체 데이터 셋 대상으로 한 test의 예측값.
 
 
 def svm_with_foot_note(X, y, try_cnt):  # https://data-newbie.tistory.com/32 이쪽도 참고바람.
@@ -605,14 +614,14 @@ def svm_with_foot_note(X, y, try_cnt):  # https://data-newbie.tistory.com/32 이
     param_grid = [{'kernel': ['rbf'],
                    'gamma': ['auto']}]
     over_random_state_try = []
-    # tfidf = TfidfVectorizer(tokenizer=identity_tokenizer_with_komoran, lowercase=False)
-    # dataset = sparse.csr_matrix(tfidf.fit_transform(df['foot_note'].values))
+    over_random_state_try_f1 = []
     for seed in range(try_cnt):
         kf = KFold(n_splits=5, random_state=seed, shuffle=True)
-        average_kfold_train_test_score_with_highest_hyperparam_of_train_val = \
+        average_kfold_train_test_score_with_highest_hyperparam_of_train_val, f1_score_mean = \
             nested_cv_multiprocess(X, y, kf, kf, param_grid, seed)
         over_random_state_try.append(average_kfold_train_test_score_with_highest_hyperparam_of_train_val)
-    return over_random_state_try
+        over_random_state_try_f1.append(f1_score_mean)
+    return over_random_state_try, over_random_state_try_f1
 
 
 def identity_tokenizer(text):
@@ -621,14 +630,11 @@ def identity_tokenizer(text):
 
 def filter_pos(df6, pos_tag_list):
     for index, row in df6.iterrows():
-        # print(df6.loc[index, 'foot_note'])
-        df6.loc[index, 'foot_note'] = [word for word in row['foot_note'] if word.split('/')[-1] in pos_tag_list]
-        # print(df6.loc[index, 'foot_note'])
-
-        # alternate try
-        # for words in row['foot_note']:  # foot_note열은 리스트 형태 원소가 있다고 가정.
-        #     if words.split('/')[-1] in pos_tag_list:
-        #         df6.loc[index, 'foot_note'] = word
+        filtered_list = [word for word in row['foot_note'] if word.split('/')[-1] in pos_tag_list]
+        if len(filtered_list) < 3:
+            print(index)
+            break
+        df6.at[index, 'foot_note'] = " ".join(filtered_list)
     return df6
 
 
@@ -663,3 +669,48 @@ def add_one_hot_with_ind_cd(df):
     df.drop(['ind_cd'], axis=1, inplace=True)
     return df
 
+
+def change_list_to_string_footnote_(df):
+    for index, row in df.iterrows():
+        df.at[index, 'foot_note'] = " ".join(row['foot_note'])
+    return df
+
+
+def tf_idf_prerocess(matched_quanti_and_qual_data, save_dir):
+    save_dir ='C:/Users/lab515/PycharmProjects/crawlDartFootNote/merged_FnGuide/for_per_qual_tf_idf_komoran.npz'
+    """ #if use komoran
+    """
+
+    path_dir = 'C:/Users/lab515/PycharmProjects/crawlDartFootNote'
+    for_filter_pos_tag = ['NNG;', 'NNP;', 'NNB;', 'NP;', 'VV;', 'VA;', 'VX;', 'VCP;', 'VCN;', 'MM;', 'MAG;', 'MAJ;',
+                          'XPN;', 'XSN;', 'XSV;', 'XSA', 'XR;', 'NF;', 'NV', "NA;"]
+
+    matched_quanti_and_qual_data = jpd.join_pickle_data('C:/Users/lab515/PycharmProjects/crawlDartFootNote/divide_by_sector', 'komoran')
+    matched_quanti_and_qual_data = filter_pos(matched_quanti_and_qual_data, for_filter_pos_tag)
+
+
+
+
+    tf = TfidfVectorizer(max_df=0.95, min_df=0)
+    # for index, row in matched_quanti_and_qual_data.iterrows():
+    #     matched_quanti_and_qual_data.at[index, 'foot_note'] = " ".join(row['foot_note'])
+    tfidf_matrix = tf.fit_transform(matched_quanti_and_qual_data['foot_note'])
+    #
+    # dep_var = '수정PER3분할'
+    # cols = list(matched_quanti_and_qual_data.columns)
+    # cols.remove('foot_note')
+    # cols.remove(dep_var)
+    # cols.insert(0, "foot_note")
+    # cols.append(dep_var)
+    # matched_quanti_and_qual_data = matched_quanti_and_qual_data[cols]
+    quanti_data_predict = matched_quanti_and_qual_data.loc[:, matched_quanti_and_qual_data.columns != 'foot_note']
+
+    B = csr_matrix(quanti_data_predict.values[:,:-1])
+    tfidf_matrix_and_quanti = hstack([tfidf_matrix, B])
+    print(tfidf_matrix_and_quanti.toarray())
+
+    scipy.sparse.save_npz(save_dir, tfidf_matrix_and_quanti)
+    # tfidf_matrix = sparse.load_npz(save_dir)
+
+
+    tfidf_matrix_komoran = sparse.load_npz('C:/Users/lab515/PycharmProjects/crawlDartFootNote/merged_FnGuide/dataset.npz')

@@ -5,7 +5,7 @@ from sklearn.model_selection import train_test_split
 from datetime import datetime, timedelta
 import numpy as np
 from scipy import sparse
-
+from scipy.sparse import csr_matrix
 
 def make_category_by_quartile(df, col_name):
     df = pd.read_excel('C:\\Users\\lab515\\PycharmProjects\\crawlDartFootNote\\financial ratio for dependent variable\\PER_rawData.xlsx'
@@ -135,9 +135,10 @@ if __name__ == '__main__':  # 시간내로 하기 위해 멀티프로세싱 적�
     path_dir = 'C:/Users/lab515/PycharmProjects/crawlDartFootNote'  # done (파일사이즈 문제와 전처리 편의를 위해 pickle로 저장하게 함.)
     dep_var = '수정PER3분할'
     ind_var_list = ['M000701061_수정PBR(배)', 'M000901001_ln총자산(천원)', 'debt_asset_ratio', 'eps_change_ratio', '수정주가분기수익률']
-    quanti_data_set_file_name = '/merged_FnGuide/quanti_per_predict.pkl'
-    qual_set_file_name = '/divide_by_sector/filter7 hannanum_filtered_pos.pkl'
-    quanti_qual_matched_file_name = 'quanti_qaul_eps_predict.pkl'
+    quanti_data_set_file_name = '/merged_FnGuide/quanti_per_dataset.pkl'
+    qual_set_file_name = '/merged_FnGuide/qual_per_dataset.pkl'
+    quanti_qual_matched_file_name = 'quanti_qaul_per_komoran.pkl'
+
     """
     # fnguide_fin_ratio_dat = pd.read_excel('main_dependant_var.xlsx', dtype=object)
     # file_name = 'filter6 komoran_attach_tag_to_pos_0.pkl'
@@ -148,24 +149,38 @@ if __name__ == '__main__':  # 시간내로 하기 위해 멀티프로세싱 적�
                                    , dtype=object, sheet_name='Sheet1')
     dep_vars = pd.read_excel('C:\\Users\\lab515\\PycharmProjects\\crawlDartFootNote\\financial ratio for dependent variable\\PER_rawData.xlsx'
                             , dtype=object, sheet_name='Sheet1')
-    data_set_file_name = 'quanti_per_predict.pkl'
+    data_set_file_name = 'quanti_per_hannanum.pkl'
     # matched_quanti_data = pfd.match_fnguide_data_among_them(quanti_ind_var, dep_var, '수정EPS\(원\)', data_set_file_name)  # 뒤에 붙이는 키워드는 정말 예측하고 싶은 종속변수명을 특정하기 위함.
     matched_quanti_data = pfd.match_fnguide_data_among_them(quanti_ind_var, dep_vars, dep_var, ind_var_list, data_set_file_name)  # 뒤에 붙이는 키워드는 정말 예측하고 싶은 종속변수명을 특정하기 위함.
     """
+    """
     quanti_ind_var = pd.read_pickle(path_dir + quanti_data_set_file_name)
     # ['Symbol', 'Name', '결산월', '회계년', '주기', 'M000701061_수정PBR(배)', 'M000901001_ln총자산(천원)', 'debt_asset_ratio', 'eps_change_ratio', '수정주가분기수익률', '수정PER3분할']
-    qual_ind_var = pd.read_pickle(path_dir + qual_set_file_name)
+    qual_ind_var = pd.read_pickle(path_dir + '/divide_by_sector/filter7 komoran_filtered_pos.pkl')
     # qual_ind_var_after = filter_number(qual_ind_var)  # 앞으로 숫자제거는 필수로.
     # qual_ind_var_after.to_pickle(path_dir + quanti_data_set_file_name)
 
     # 실제 있는 열의 목록 columns=['crp_cd', 'ind_cd', 'crp_cls', 'crp_nm', 'rpt_nm', 'foot_note', 'rcp_dt']
     # qual_ind_var = add_one_hot(qual_ind_var, 'crp_cls')  # for test
     # qual_ind_var = add_one_hot_with_ind_cd(qual_ind_var)  # for test
-    qual_ind_var = pfd.add_one_hot(qual_ind_var, 'crp_cls')
-    qual_ind_var.drop(['crp_nm', 'rcp_dt'], axis=1, inplace=True)
+    # qual_ind_var = pfd.add_one_hot(qual_ind_var, 'crp_cls')  # 이미 다해뒀다.
 
-    matched_quanti_and_qual_data = match_fnguide_data_and_delete_redundant(qual_ind_var, quanti_ind_var,
-                                                                           'quanti_qaul_eps_predict.pkl')
+    matched_quanti_and_qual_data, valid_df_idx_list = pfd.match_quanti_and_qual_data(qual_ind_var, quanti_ind_var,
+                                                                  'quanti_qaul_per_komoran.pkl')
+    columns = ['crp_cd', 'rpt_nm', 'Symbol', 'Name', '결산월_x', '결산월_y', '회계년', 'crp_nm 'rcp_dt']  # 주기는 일단 남긴다. 년도는 미래 예측에도 강건한 성능을 보이기 위해 빼더라도.
+    # columns = ['crp_cd', 'ind_cd', 'crp_cls', 'crp_nm', 'rpt_nm', 'rcp_no', 'dic_cls', 'dcm_no', 'col_dcm_no', 'consolidated_foot_note', 'rcp_dt',
+    #            'Symbol', '결산월', '회계년']
+    # df5_2의 컬럼 목록 ['crp_cd', 'ind_cd', 'crp_cls', 'crp_nm', 'rpt_nm', 'rcp_no', 'dic_cls', 'dcm_no', 'col_dcm_no', 'foot_note', 'consolidated_foot_note', 'rcp_dt']
+    # 현시점에서 산업코드 나누는건 의미 없고(사실 절반이 제조업이라 더더욱), 종목코드는 중복이라 Symbol 삭제,
+    # rcp_dt는 이전 단계에 써먹어야 했음, crp_nm은 어차피 종목코드로 대체(검색 편의를 위해 남겼을 뿐),
+    # 결산월과 회계년은 이미 t+1과 t0를 맞추는데 사용.
+    # rpt_nm은 좀 애매한데 일단 분기 보고서인지 반기보고서인지 나눠서 제어할 필요가 있다고 보고 남김.
+    matched_quanti_and_qual_data.dropna(inplace=True)  # 사실 별 의미 없는 짓이다.
+    matched_quanti_and_qual_data.drop(columns, inplace=True, axis=1)
+
+    matched_quanti_and_qual_data = pfd.add_one_hot(matched_quanti_and_qual_data, '주기')
+    # matched_quanti_and_qual_data = add_one_hot(matched_quanti_and_qual_data, '주기')  # for test
+    matched_quanti_and_qual_data.to_pickle(path_dir+'/merged_FnGuide/'+quanti_qual_matched_file_name)
 
     # matched_quanti_and_qual_data = pd.merge(left=quanti_ind_var, right=qual_ind_var, how='left', on=['Symbol', 'Name', '회계년', '주기'], sort=False)
     # matched_quanti_and_qual_data = matched_quanti_and_qual_data.drop(columns=['acc_crp'])
@@ -173,34 +188,44 @@ if __name__ == '__main__':  # 시간내로 하기 위해 멀티프로세싱 적�
     # columns = ['crp_nm', 'rcp_dt']  # 결합했으므로 불필요한 열. 'ind_cd', 'crp_cls'는 one-hot으로 바꾸는 과정에서 제거됨.
     # qual_ind_var.drop(columns, inplace=True, axis=1)
 
-
-
-    matched_quanti_and_qual_data = pd.merge
-
-    matched_quanti_and_qual_data, valid_df_idx_list = pfd.match_fnguide_data_and_delete_redundant(qual_ind_var, matched_quanti_data, data_set_file_name)
-
-    dataset, y = pfd.filter_pos(valid_df_idx_list, matched_quanti_and_qual_data)
-
     """
     # matched_quanti_and_qual_data = pd.read_pickle('./merged_FnGuide/quanti_qaul_eps_predict.pkl')
-    
+    matched_quanti_and_qual_data = pd.read_pickle('./merged_FnGuide/'+quanti_qual_matched_file_name)
+    # matched_quanti_and_qual_data = matched_quanti_and_qual_data.drop(matched_quanti_and_qual_data.index[0])  # 특이 케이스
+    matched_quanti_and_qual_data['M수정PER'] = matched_quanti_and_qual_data['M수정PER'].astype('float')
+    matched_quanti_and_qual_data[dep_var] = matched_quanti_and_qual_data[dep_var].astype('int8')
+    print(matched_quanti_and_qual_data.info())
+    # arrange column order
+    cols = list(matched_quanti_and_qual_data.columns)
+    cols.remove('foot_note')
+    cols.remove(dep_var)
+    cols.insert(0, "foot_note")
+    cols.append(dep_var)
+    matched_quanti_and_qual_data = matched_quanti_and_qual_data[cols]
 
+    quanti_data_predict = matched_quanti_and_qual_data.loc[:, matched_quanti_and_qual_data.columns != 'foot_note']
+    """
     start_time = datetime.now()
     print("start_time : ", start_time)
-    rms_list1 = pfd.previous_research_with_svm(matched_quanti_data.values, 30)
+    # rms_list1 = previous_research_with_svm(quanti_data_predict.values, 30)
+
+    acc_list1 = pfd.previous_research_with_svm(quanti_data_predict.values, 30)
     print("take time : {}".format(datetime.now() - start_time))
     """
-    """
-    # matched_quanti_and_qual_data = pd.read_pickle('merged_FnGuide/quanti_qaul_eps_predict.pkl')
-    X = sparse.load_npz('./merged_FnGuide/dataset.npz')
-    matched_quanti_and_qual_data = pd.read_pickle('./merged_FnGuide/quanti_qaul_eps_predict.pkl')
-    y = matched_quanti_and_qual_data.values[:, -1]
-
+    acc_list1 = [0.459472,0.459046,0.458718,0.459158,0.458742,0.458874,0.458742,0.458576,0.458782,0.458742,0.458726,0.45907,0.45916,0.459168,0.45921,0.458784,0.45898,0.45898,0.459152,0.458972,0.459134,0.458308,0.459234,0.458642,0.45888,0.459226,0.459342,0.458872,0.458962,0.458732]
+    f1_list1 = [0.226717177,0.2251687,0.227156287,0.226409794,0.2269375,0.226362649,0.227054485,0.22680026,0.227619277,0.226738998,0.22763236,0.227521745,0.22727243,0.226296926,0.22657343,0.226313087,0.227119704,0.226576077,0.226087876,0.227655016,0.226092129,0.225271832,0.227221064,0.225434696,0.227670123,0.22678054,0.22680888,0.227290038,0.227021287,0.227555999]
+    # matched_quanti_and_qual_data = pd.read_pickle('./merged_FnGuide/quanti_qaul_per_dataset.pkl')
+    X = sparse.load_npz('./merged_FnGuide/for_per_qual_tf_idf_komoran.npz')
+    # matched_quanti_and_qual_data = pd.read_pickle('./merged_FnGuide/quanti_qaul_eps_predict.pkl')
+    y = quanti_data_predict.values[:, -1].astype('int8')
+    del quanti_data_predict
+    X = csr_matrix(X)
     start_time = datetime.now()
-    print("start_time : ", start_time)
-    rms_list2 = pfd.svm_with_foot_note(X, y, 30)
+    print("total start_time : ", start_time)
+    acc_list2, f1_list2 = pfd.svm_with_foot_note(X, y, 30)
     # rms_list2 = svm_with_foot_note(X, y, 30)
-    print("take time : {}".format(datetime.now() - start_time))
+    print("total take time : {}".format(datetime.now() - start_time))
 
-    # pfd.equ_var_test_and_unpaired_t_test(rms_list1, rms_list2)  # 독립 t-test
-    """
+    # pfd.equ_var_test_and_unpaired_t_test(acc_list1, acc_list2)  # 독립 t-test 단방향 검정
+    # pfd.equ_var_test_and_unpaired_t_test(f1_list1, f1_list2)  # 독립 t-test 단방향 검정
+
