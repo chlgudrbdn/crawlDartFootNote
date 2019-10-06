@@ -509,13 +509,11 @@ def previous_research_with_svm(dataset, try_cnt):
                    'gamma': ['auto']}
                   ]
     over_random_state_try = []
-    scaler = StandardScaler()
     for seed in range(try_cnt):
         # seed = 42  # for test
         kf = KFold(n_splits=5, random_state=seed, shuffle=True)
         average_kfold_train_test_score_with_highest_hyperparam_of_train_val = \
-            nested_cv_multiprocess(scaler.fit_transform(dataset[:, :-1]),
-                                   dataset[:, -1].ravel(),
+            nested_cv_multiprocess(dataset[:, :-1], dataset[:, -1].ravel(),
                                    kf, kf, param_grid, try_cnt)  # 최소 3*5*5*30=225회
             # nested_cv(scaler.fit_transform(dataset[:, 3:-1]), dataset[:, -1].ravel(), kf, kf, ParameterGrid(param_grid))
         # X_train, X_test, y_train, y_test = \
@@ -684,13 +682,8 @@ def tf_idf_prerocess(matched_quanti_and_qual_data, save_dir):
     path_dir = 'C:/Users/lab515/PycharmProjects/crawlDartFootNote'
     for_filter_pos_tag = ['NNG;', 'NNP;', 'NNB;', 'NP;', 'VV;', 'VA;', 'VX;', 'VCP;', 'VCN;', 'MM;', 'MAG;', 'MAJ;',
                           'XPN;', 'XSN;', 'XSV;', 'XSA', 'XR;', 'NF;', 'NV', "NA;"]
-
-    matched_quanti_and_qual_data = jpd.join_pickle_data('C:/Users/lab515/PycharmProjects/crawlDartFootNote/divide_by_sector', 'komoran')
-    matched_quanti_and_qual_data = filter_pos(matched_quanti_and_qual_data, for_filter_pos_tag)
-
-
-
-
+    # matched_quanti_and_qual_data = jpd.join_pickle_data('C:/Users/lab515/PycharmProjects/crawlDartFootNote/divide_by_sector', 'komoran')
+    # matched_quanti_and_qual_data = filter_pos(matched_quanti_and_qual_data, for_filter_pos_tag)
     tf = TfidfVectorizer(max_df=0.95, min_df=0)
     # for index, row in matched_quanti_and_qual_data.iterrows():
     #     matched_quanti_and_qual_data.at[index, 'foot_note'] = " ".join(row['foot_note'])
