@@ -235,7 +235,7 @@ def nb_with_foot_note(X, y, try_cnt):  # https://data-newbie.tistory.com/32 이�
 
 if __name__ == '__main__':  # 시간내로 하기 위해 멀티프로세싱 적극 활용 요함.
     # 최초엔 일단 종속_리스트, 독립변수명을 정해두는것이 편해보인다.
-    path_dir = 'C:/Users/houng-gyu/PycharmProjects/crawlDartFootNote'  # done (파일사이즈 문제와 전처리 편의를 위해 pickle로 저장하게 함.)
+    path_dir = 'C:/Users/lab515/PycharmProjects/crawlDartFootNote'  # done (파일사이즈 문제와 전처리 편의를 위해 pickle로 저장하게 함.)
     dep_var = '수정PER3분할'
     ind_var_list = ['M000701061_수정PBR(배)', 'M000901001_ln총자산(천원)', 'debt_asset_ratio', 'eps_change_ratio', '수정주가분기수익률']
     quanti_data_set_file_name = '/merged_FnGuide/quanti_per_dataset.pkl'
@@ -332,4 +332,3 @@ if __name__ == '__main__':  # 시간내로 하기 위해 멀티프로세싱 적�
 
     # pfd.equ_var_test_and_unpaired_t_test(acc_list1, acc_list2)  # 독립 t-test 단방향 검정
     # pfd.equ_var_test_and_unpaired_t_test(f1_list1, f1_list2)  # 독립 t-test 단방향 검정
-
