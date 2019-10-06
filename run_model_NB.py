@@ -235,7 +235,7 @@ def nb_with_foot_note(X, y, try_cnt):  # https://data-newbie.tistory.com/32 이�
 
 if __name__ == '__main__':  # 시간내로 하기 위해 멀티프로세싱 적극 활용 요함.
     # 최초엔 일단 종속_리스트, 독립변수명을 정해두는것이 편해보인다.
-    path_dir = 'C:/Users/lab515/PycharmProjects/crawlDartFootNote'  # done (파일사이즈 문제와 전처리 편의를 위해 pickle로 저장하게 함.)
+    path_dir = 'C:/Users/houng-gyu/PycharmProjects/crawlDartFootNote'  # done (파일사이즈 문제와 전처리 편의를 위해 pickle로 저장하게 함.)
     dep_var = '수정PER3분할'
     ind_var_list = ['M000701061_수정PBR(배)', 'M000901001_ln총자산(천원)', 'debt_asset_ratio', 'eps_change_ratio', '수정주가분기수익률']
     quanti_data_set_file_name = '/merged_FnGuide/quanti_per_dataset.pkl'
@@ -306,6 +306,8 @@ if __name__ == '__main__':  # 시간내로 하기 위해 멀티프로세싱 적�
     matched_quanti_and_qual_data = matched_quanti_and_qual_data[cols]
 
     quanti_data_predict = matched_quanti_and_qual_data.loc[:, matched_quanti_and_qual_data.columns != 'foot_note']
+
+    """
     start_time = datetime.now()
     print("start_time : ", start_time)
     # rms_list1 = previous_research_with_svm(quanti_data_predict.values, 30)
@@ -314,6 +316,9 @@ if __name__ == '__main__':  # 시간내로 하기 위해 멀티프로세싱 적�
     print(f1_list1)
     print("take time : {}".format(datetime.now() - start_time))
     # matched_quanti_and_qual_data = pd.read_pickle('./merged_FnGuide/quanti_qaul_per_dataset.pkl')
+    
+    """
+
     X = sparse.load_npz('./merged_FnGuide/for_per_qual_tf_idf_komoran.npz')
     # matched_quanti_and_qual_data = pd.read_pickle('./merged_FnGuide/quanti_qaul_eps_predict.pkl')
     y = quanti_data_predict.values[:, -1].astype('int8')
