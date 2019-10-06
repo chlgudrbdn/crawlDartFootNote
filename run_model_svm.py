@@ -204,12 +204,12 @@ if __name__ == '__main__':  # 시간내로 하기 위해 멀티프로세싱 적�
     matched_quanti_and_qual_data = matched_quanti_and_qual_data[cols]
 
     quanti_data_predict = matched_quanti_and_qual_data.loc[:, matched_quanti_and_qual_data.columns != 'foot_note']
-    """
+
     start_time = datetime.now()
     print("start_time : ", start_time)
     # rms_list1 = previous_research_with_svm(quanti_data_predict.values, 30)
 
-    acc_list1 = pfd.previous_research_with_svm(quanti_data_predict.values, 30)
+    acc_list1, f1_list1 = pfd.previous_research_with_svm(quanti_data_predict.values, 30)
     print("take time : {}".format(datetime.now() - start_time))
     """
     acc_list1 = [0.459472,0.459046,0.458718,0.459158,0.458742,0.458874,0.458742,0.458576,0.458782,0.458742,0.458726,0.45907,0.45916,0.459168,0.45921,0.458784,0.45898,0.45898,0.459152,0.458972,0.459134,0.458308,0.459234,0.458642,0.45888,0.459226,0.459342,0.458872,0.458962,0.458732]
@@ -225,7 +225,7 @@ if __name__ == '__main__':  # 시간내로 하기 위해 멀티프로세싱 적�
     acc_list2, f1_list2 = pfd.svm_with_foot_note(X, y, 30)
     # rms_list2 = svm_with_foot_note(X, y, 30)
     print("total take time : {}".format(datetime.now() - start_time))
-
+    """
     # pfd.equ_var_test_and_unpaired_t_test(acc_list1, acc_list2)  # 독립 t-test 단방향 검정
     # pfd.equ_var_test_and_unpaired_t_test(f1_list1, f1_list2)  # 독립 t-test 단방향 검정
 

@@ -1,14 +1,12 @@
-from sklearn.model_selection import KFold
 from scipy import sparse
 from scipy.sparse import csr_matrix, hstack
 from scipy import stats
 from sklearn.metrics import make_scorer
-from sklearn.preprocessing import StandardScaler
+from sklearn.preprocessing import MinMaxScaler
 from sklearn.model_selection import GridSearchCV
 from sklearn.metrics import accuracy_score
 from sklearn.metrics import confusion_matrix
 from sklearn.metrics import f1_score
-# from sklearn.svm import SVR
 from sklearn.ensemble import BaggingClassifier
 import preprocess_footnotes_data as pfd
 import pandas as pd
@@ -19,7 +17,10 @@ import numpy as np
 from scipy import sparse
 from scipy.sparse import csr_matrix
 import sklearn
-from sklearn.naive_bayes import ComplementNB
+from sklearn.naive_bayes import ComplementNB, MultinomialNB
+from sklearn.model_selection import StratifiedKFold
+from sklearn.feature_extraction.text import TfidfVectorizer
+import scipy.sparse
 
 
 def make_category_by_quartile(df, col_name):
@@ -148,21 +149,25 @@ def add_t_minus_dep_var(quanti_ind_var, dep_vars, dep_var, dep_var_t_minus):  # 
 def previous_research_with_nb(dataset, try_cnt):
     param_grid = [{'kernel': ['rbf'], 'gamma': ['auto']}]
     over_random_state_try = []
-    scaler = StandardScaler()
+    over_random_state_try_f1 = []
     for seed in range(try_cnt):
         # seed = 42  # for test
-        kf = KFold(n_splits=5, random_state=seed, shuffle=True)
-        average_kfold_train_test_score_with_highest_hyperparam_of_train_val = \
+        kf = StratifiedKFold(n_splits=5, random_state=seed, shuffle=True)
+        average_kfold_test_score, f1_score_mean = \
             nested_cv_multiprocess(dataset[:, :-1], dataset[:, -1].ravel(), kf, kf, param_grid, try_cnt)  # 최소 3*5*5*30=225회
-        print(' try :', seed, " ", average_kfold_train_test_score_with_highest_hyperparam_of_train_val)
-        over_random_state_try.append(average_kfold_train_test_score_with_highest_hyperparam_of_train_val)
-    return over_random_state_try
+        print(' try :', seed, " ", average_kfold_test_score)
+        over_random_state_try.append(average_kfold_test_score)
+        over_random_state_try_f1.append(f1_score_mean)
+    return over_random_state_try,over_random_state_try_f1
 
 
 def nested_cv_multiprocess(X, y, inner_cv, outer_cv, parameter_grid, seed):
     outer_scores = []
     f1_scores = []
     print(X.shape)
+    unique_elements, counts_elements = np.unique(y, return_counts=True)
+    print("Frequency of unique values of the said array:")
+    print(np.asarray((unique_elements, counts_elements)))
     start_time = datetime.now()
     print("start_time : ", start_time)
     for training_samples, test_samples in outer_cv.split(X, y):
@@ -181,14 +186,10 @@ def nested_cv_multiprocess(X, y, inner_cv, outer_cv, parameter_grid, seed):
         print("최적 매개변수:", grid_search.best_params_)
         print("최고 교차 검증 점수: {:.5f}".format(grid_search.best_score_))
         """
-        # cls = SVC(**grid_search.best_params_)
         nbc = ComplementNB()
         # cls = BaggingClassifier(base_estimator=nbc, n_estimators=8, n_jobs=-1, max_samples=1.0 / 8.0,)
         nbc.fit(X[training_samples], y[training_samples])
-        # 테스트 세트를 사용해 평가합니다
-        # outer_scores.append(reg.score(X[test_samples], y[test_samples]))
         pred = nbc.predict(X[test_samples])
-        # print('mean acurracy of this param on testset : ', cls.score(X[test_samples], y[test_samples]))
         mean_acc = accuracy_score(y[test_samples], pred)
         f1 = f1_score(y[test_samples], pred, average='macro')
         print('mean acurracy of this param on testset :', mean_acc)
@@ -226,10 +227,11 @@ def nb_with_foot_note(X, y, try_cnt):  # https://data-newbie.tistory.com/32 이�
     over_random_state_try = []
     over_random_state_try_f1 = []
     for seed in range(try_cnt):
-        kf = KFold(n_splits=5, random_state=seed, shuffle=True)
+        kf = StratifiedKFold(n_splits=5, random_state=seed, shuffle=True)
         average_kfold_test_score, f1_score_mean = nested_cv_multiprocess(X, y, kf, kf, param_grid, seed)
         over_random_state_try.append(average_kfold_test_score)
         over_random_state_try_f1.append(f1_score_mean)
+        print(' try :', seed, " ", average_kfold_test_score)
     return over_random_state_try, over_random_state_try_f1
 
 
@@ -307,6 +309,9 @@ if __name__ == '__main__':  # 시간내로 하기 위해 멀티프로세싱 적�
 
     quanti_data_predict = matched_quanti_and_qual_data.loc[:, matched_quanti_and_qual_data.columns != 'foot_note']
 
+    scaler = MinMaxScaler()
+    float_col = quanti_data_predict.select_dtypes(include='float64').columns
+    quanti_data_predict[float_col] = scaler.fit_transform(quanti_data_predict[float_col])
     """
     start_time = datetime.now()
     print("start_time : ", start_time)
@@ -316,10 +321,21 @@ if __name__ == '__main__':  # 시간내로 하기 위해 멀티프로세싱 적�
     print(f1_list1)
     print("take time : {}".format(datetime.now() - start_time))
     # matched_quanti_and_qual_data = pd.read_pickle('./merged_FnGuide/quanti_qaul_per_dataset.pkl')
-    
     """
+    """
+    tf = TfidfVectorizer(max_df=0.95, min_df=0)
+    tfidf_matrix = tf.fit_transform(matched_quanti_and_qual_data['foot_note'])
 
-    X = sparse.load_npz('./merged_FnGuide/for_per_qual_tf_idf_komoran.npz')
+    B = csr_matrix(quanti_data_predict.values[:,:-1])
+    tfidf_matrix_and_quanti = hstack([tfidf_matrix, B])
+    save_dir ='C:/Users/lab515/PycharmProjects/crawlDartFootNote/merged_FnGuide/for_per_qual_tf_idf_komoran_not_negative.npz'
+    scipy.sparse.save_npz(save_dir, tfidf_matrix_and_quanti)
+    """
+    acc_list1=[0.342491786, 0.338974298, 0.341012847, 0.342131251, 0.345483109, 0.344792093, 0.347585659, 0.345351751, 0.346698566, 0.346994472, 0.339138426, 0.34157223, 0.344856668, 0.350050932, 0.347749561, 0.34982028, 0.345546641, 0.346206474, 0.342426331, 0.348702929, 0.346107417, 0.344400408, 0.338647058, 0.346270551, 0.343344154, 0.34370686, 0.342985406, 0.344367189, 0.341276048, 0.341934266]
+    f1_list1= [0.335318838, 0.33217238, 0.333729009, 0.336476612, 0.337145349, 0.337307469, 0.339069686, 0.337841502, 0.33987799, 0.33683696, 0.332125111, 0.335478414, 0.335398776, 0.34207104, 0.339047746, 0.342129707, 0.337680041, 0.339728983, 0.336598821, 0.339377808, 0.337762321, 0.335811287, 0.334108928, 0.340246385, 0.335319237, 0.335279031, 0.336368307, 0.337491949, 0.333053155, 0.334646923]
+    qual_nb_acc=[0.453216079, 0.453314439, 0.452821478, 0.45308443, 0.453084274, 0.453018603, 0.453577489, 0.453018803, 0.452887208, 0.4535444, 0.453150279, 0.453051557, 0.453413469, 0.453182925, 0.453150106, 0.454004634, 0.453380186, 0.452953008, 0.452657058, 0.453446105, 0.453314553, 0.452230124, 0.452624401, 0.453084409, 0.453084857, 0.452854086, 0.453577489, 0.453544557, 0.453511705, 0.4530187]
+    qual_nb_f1=[0.21470978, 0.215443078, 0.213816053, 0.214770373, 0.21535718, 0.215106216, 0.214799295, 0.214455732, 0.214401097, 0.214934883, 0.215466718, 0.215136045, 0.214880279, 0.215020666, 0.214988856, 0.215994993, 0.215783715, 0.215174574, 0.214480988, 0.216328677, 0.215506012, 0.214241144, 0.21493002, 0.215195469, 0.214724474, 0.215433274, 0.215561898, 0.214863962, 0.215894463, 0.214353529]
+    X = sparse.load_npz('./merged_FnGuide/for_per_qual_tf_idf_komoran_not_negative.npz')
     # matched_quanti_and_qual_data = pd.read_pickle('./merged_FnGuide/quanti_qaul_eps_predict.pkl')
     y = quanti_data_predict.values[:, -1].astype('int8')
     del quanti_data_predict
@@ -328,6 +344,8 @@ if __name__ == '__main__':  # 시간내로 하기 위해 멀티프로세싱 적�
     print("total start_time : ", start_time)
     acc_list2, f1_list2 = nb_with_foot_note(X, y, 30)
     # rms_list2 = svm_with_foot_note(X, y, 30)
+    print(acc_list2)
+    print(f1_list2)
     print("total take time : {}".format(datetime.now() - start_time))
 
     # pfd.equ_var_test_and_unpaired_t_test(acc_list1, acc_list2)  # 독립 t-test 단방향 검정

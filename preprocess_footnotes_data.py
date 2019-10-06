@@ -22,7 +22,7 @@ from sklearn.model_selection import train_test_split
 from sklearn.metrics import mean_squared_error
 from sklearn.model_selection import cross_val_score
 from math import sqrt
-from sklearn.model_selection import KFold
+from sklearn.model_selection import StratifiedKFold
 from scipy import sparse
 from scipy.sparse import csr_matrix, hstack
 from scipy import stats
@@ -509,10 +509,11 @@ def previous_research_with_svm(dataset, try_cnt):
                    'gamma': ['auto']}
                   ]
     over_random_state_try = []
+    over_random_state_try_f1 = []
     for seed in range(try_cnt):
         # seed = 42  # for test
-        kf = KFold(n_splits=5, random_state=seed, shuffle=True)
-        average_kfold_train_test_score_with_highest_hyperparam_of_train_val = \
+        kf = StratifiedKFold(n_splits=5, random_state=seed, shuffle=True)
+        average_kfold_train_test_score_with_highest_hyperparam_of_train_val, f1_score_mean = \
             nested_cv_multiprocess(dataset[:, :-1], dataset[:, -1].ravel(),
                                    kf, kf, param_grid, try_cnt)  # 최소 3*5*5*30=225회
             # nested_cv(scaler.fit_transform(dataset[:, 3:-1]), dataset[:, -1].ravel(), kf, kf, ParameterGrid(param_grid))
@@ -521,6 +522,8 @@ def previous_research_with_svm(dataset, try_cnt):
         # best_score = 0
         print(' try :', seed, " ", average_kfold_train_test_score_with_highest_hyperparam_of_train_val)
         over_random_state_try.append(average_kfold_train_test_score_with_highest_hyperparam_of_train_val)
+        over_random_state_try_f1.append(f1_score_mean)
+
         # print(rms)
         # if score > best_score:
         #     best_score = score
@@ -529,7 +532,7 @@ def previous_research_with_svm(dataset, try_cnt):
         # print("최적 매개점수: {}".format(best_parameters))
     # 교차검증 테스트 평균 점수가 같은데, 표준편차가 작다면 그게 더 좋다고 판단.
     # 탐색순서는 C가 고정되고 gamma가 변하는 식.
-    return over_random_state_try
+    return over_random_state_try, over_random_state_try_f1
 
 
 def nested_cv_multiprocess(X, y, inner_cv, outer_cv, parameter_grid, seed):
@@ -560,7 +563,7 @@ def nested_cv_multiprocess(X, y, inner_cv, outer_cv, parameter_grid, seed):
         """
         # cls = SVC(**grid_search.best_params_)
         svc = SVC(kernel='rbf', gamma='auto')
-        cls = BaggingClassifier(base_estimator=svc, n_estimators=8, n_jobs=-1, max_samples=1.0 / 8.0,)
+        cls = BaggingClassifier(base_estimator=svc, n_estimators=5, n_jobs=-1, max_samples=1.0 / 5.0,)
         cls.fit(X[training_samples], y[training_samples])
         # 테스트 세트를 사용해 평가합니다
         # outer_scores.append(reg.score(X[test_samples], y[test_samples]))
@@ -614,7 +617,7 @@ def svm_with_foot_note(X, y, try_cnt):  # https://data-newbie.tistory.com/32 이
     over_random_state_try = []
     over_random_state_try_f1 = []
     for seed in range(try_cnt):
-        kf = KFold(n_splits=5, random_state=seed, shuffle=True)
+        kf = StratifiedKFold(n_splits=5, random_state=seed, shuffle=True)
         average_kfold_train_test_score_with_highest_hyperparam_of_train_val, f1_score_mean = \
             nested_cv_multiprocess(X, y, kf, kf, param_grid, seed)
         over_random_state_try.append(average_kfold_train_test_score_with_highest_hyperparam_of_train_val)
