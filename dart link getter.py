@@ -24,10 +24,10 @@ from bs4 import BeautifulSoup
 
 crawl_start_time = datetime.now()
 print("crawl_start_time : ", crawl_start_time)
-begin_date = '20110101'
+# begin_date = '20110101'
 # end_date = '20111231'
 # begin_date = '20120101'
-end_date = '20121231'
+# end_date = '20121231'
 # begin_date = '20130101'  #
 # end_date = '20131231'  #
 # begin_date = '20140101'  #
@@ -41,6 +41,10 @@ end_date = '20121231'
 # begin_date = '20180101'  #
 # end_date = '20150817'  #
 # end_date = '20181231'  #
+# end_date = '20181231'  #
+# end_date = '20181231'  #
+begin_date = '20190101'  #
+end_date = '20190630'  #
 
 
 def init():
@@ -393,8 +397,8 @@ def make_sheet(crp_cls, directory_name):  # 디렉토리명은 추후 추가적�
 def main():
     init()
     # crp_cls = input('법인유형(e.g. 유가증권시장이면 Y, 코스닥이면 K, 코넥스면 N, 기타는 E)를 대문자로 입력하세요.')
-    # crp_cls = 'Y'  # 테스트용
-    crp_cls = 'K'  # 테스트용
+    crp_cls = 'Y'  # 테스트용
+    # crp_cls = 'K'  # 테스트용
     now = datetime.now().strftime('%Y-%m-%d %H-%M-%S')  # 파일이름 지을때 사용할 문자열(날짜형이 아닌 문자형)
     driver.get('http://dart.fss.or.kr/dsab002/main.do')
 
@@ -424,8 +428,8 @@ def main():
     # 보고서 지정
     driver.find_element_by_id('publicTypeButton_01').click()  # 정기 공시
     driver.find_element_by_id('publicType1').click()  #
-    driver.find_element_by_id('publicType2').click()
-    driver.find_element_by_id('publicType3').click()
+    # driver.find_element_by_id('publicType2').click()
+    # driver.find_element_by_id('publicType3').click()
 
     # 최대 조회 수 지정(최대 100까지 볼 수 있다)
     select = Select(driver.find_element_by_id('maxResultsCb'))

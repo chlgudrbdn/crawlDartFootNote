@@ -116,7 +116,7 @@ def revision_disclose_use_or_just_not_resvision(df3_2):  # 만약 다음 공시 
         cur_rpt_nm = row['rpt_nm']
         cur_rcp_dt = row['rcp_dt']
 
-        if cur_crp_cd == pre_crp_cd and cur_rpt_nm == pre_rpt_nm:
+        if cur_crp_cd == pre_crp_cd and cur_rpt_nm == pre_rpt_nm:  # 만약 중복되고
             t_closing_date = cur_rpt_nm[cur_rpt_nm.find("(")+1:cur_rpt_nm.find(")")].split('.')
             tplus_closing_date = datetime(int(t_closing_date[0]), int(t_closing_date[1]), 1)+ relativedelta(months=3)
 
@@ -277,8 +277,7 @@ def xplit(*delimiters):
     return lambda value: re.split('|'.join([re.escape(delimiter) for delimiter in delimiters]), value)
 
 
-def match_quanti_and_qual_data(qual_ind_var, quanti_ind_var, file_name):  # t+1 종속변수와 t독립 변수 비교
-    file_name = 'quanti_qaul_per_dataset.pkl'  # for test
+def match_quanti_and_qual_data(qual_ind_var, quanti_ind_var, file_name):  # 정량 독립 및 정량 종속 변수와 정성 독립 변수 매칭
     result_df = pd.DataFrame()
     valid_df_idx_list = []
     for index, row in qual_ind_var.iterrows():
@@ -340,21 +339,21 @@ def match_quanti_and_qual_data(qual_ind_var, quanti_ind_var, file_name):  # t+1 
     return matched_quanti_and_qual_data, valid_df_idx_list
 
 
-def match_fnguide_data_among_them(quanti_ind_var, dep_vars, dep_var, ind_var, file_name):
+def match_fnguide_data_among_them(quanti_ind_var, dep_vars, dep_var, ind_var_list, file_name):
     # quanti_ind_var = pd.read_excel('C:\\Users\\jin\\PycharmProjects\\crawlDartFootNote\\previous research independant variable\\about_EPS_independant_var.xlsx', dtype=object, sheet_name='Sheet1')
     # dep_var = pd.read_excel('C:\\Users\\jin\\PycharmProjects\\crawlDartFootNote\\financial ratio for dependent variable retrived 2019_05_15\\EPS_rawData.xlsx', dtype=object, sheet_name='Sheet1')
     # keyword = '수정EPS\(원\)'
     # file_name = ''
     identifier = ['Symbol', 'Name', '결산월', '회계년', '주기']
     dep_vars = pd.concat([dep_vars.loc[:, identifier],
-                         dep_vars.loc[:, dep_vars.columns.str.contains(dep_var)]], axis=1)  # 일단 폼은 유지하되 필요한 변수 하나만 떼다 쓰기 위함.
+                         dep_vars.loc[:, dep_var]], axis=1)  # 일단 폼은 유지하되 필요한 변수 하나만 떼다 쓰기 위함.
     # dep_vars = dep_vars.replace(0, np.nan)  # 가끔 데이터가 없는데 0으로 채워진 경우는 그냥 이렇게 한다. 어차피 데이터가 없을게 뻔해서 의미는 없지만 혹시 모르니까. 특히 거래가 없는 경우. # regression이라면 이 코드가 필요하지만 classification엔 필요 없는 일이었다. 0,1,2로 클래스가 나뉘는 마당에.
     dep_vars.dropna(thresh=6, inplace=True)  # 식별 위한 정보를 제외한 것이 없는 경우. 어차피 이게 없으면 아무것도 안되므로.
     # print(dep_var.info())
 
     # print(quanti_dep_var.columns)
     # print('ind_var : ', ind_var)
-    identifier.extend(ind_var)
+    identifier.extend(ind_var_list)
     # print('new ind_var : ', identifier)
     # quanti_ind_var = quanti_ind_var.drop(columns=list(quanti_ind_var.loc[:, quanti_ind_var.columns.str.contains('^주기')].columns))  # 주기는 불필요하니 제거
     quanti_ind_var = quanti_ind_var[identifier]
@@ -387,7 +386,9 @@ def match_fnguide_data_among_them(quanti_ind_var, dep_vars, dep_var, ind_var, fi
         # result_df = result_df.append(tplus_data, ignore_index=True)  # 찾은 결과를 한줄씩 붙인뒤 나중에 옆으로 붙일 예정.
         # print('tplus_data : ', tplus_data)
         # print('tplus_data : ', tplus_data[dep_var].iloc[0])
-        quanti_ind_var.loc[index, dep_var] = tplus_data[dep_var].iloc[0]  # ?
+        print('tplus_data : ', tplus_data)
+        print('tplus_data : ', list(tplus_data.loc[:, dep_var]))
+        quanti_ind_var.loc[index, dep_var] = tplus_data.loc[:, dep_var]  # t+1 분기와 매칭
 
     # result_df = result_df.drop(columns=['Symbol', 'Name', '결산월', '회계년'])  # 종속변수 쪽 식별 정보는 필요 없음.
     # result_df.reset_index(drop=True, inplace=True)
@@ -420,23 +421,30 @@ def match_fnguide_data_among_them(quanti_ind_var, dep_vars, dep_var, ind_var, fi
 def equ_var_test_and_unpaired_t_test(x1, x2):  # 모든 조합으로 독립표본 t-test 실시. 일단 다른 변수로 감안.(같다면 등분산 t-test라고 생각)
     # 등분산성 확인. 가장 기본적인 방법은 F분포를 사용하는 것이지만 실무에서는 이보다 더 성능이 좋은 bartlett, fligner, levene 방법을 주로 사용.
     # https://datascienceschool.net/view-notebook/14bde0cc05514b2cae2088805ef9ed52/
+    alpha = 0.05
     if stats.levene(x1, x2).pvalue < 0.05:  # 이보다 적으면 등분산.
         tTestResult = stats.ttest_ind(x1, x2, equal_var=True)
         print("The t-statistic and p-value assuming equal variances is %.3f and %.3f." % tTestResult)
         # 출처: http: // thenotes.tistory.com / entry / Ttest - in -python[NOTES]
-        if tTestResult.pvalue < 0.05:
+        # if tTestResult.pvalue < 0.05:
+        if (tTestResult[0] < 0) & (tTestResult[1]/2 < alpha):
             compare_mean(x1, x2)
+            print("reject null hypothesis, mean of {} is less than mean of {}".format('X1', 'X2'))
         else:
-            print("two sample mean is same h0 not rejected")
+            compare_mean(x1, x2)
+            print("two sample mean is same h0 accepted")
     else:
         tTestResult = stats.ttest_ind(x1, x2, equal_var=False)  # 등분산이 아니므로 Welch’s t-test
         print("The t-statistic and p-value not assuming equal variances is %.3f and %.3f" % tTestResult)
         # 출처: http: // thenotes.tistory.com / entry / Ttest - in -python[NOTES]
-        if tTestResult.pvalue < 0.05:
+        # if tTestResult.pvalue < 0.05:
+        if (tTestResult[0] < 0) & (tTestResult[1]/2 < alpha):
             compare_mean(x1, x2)
+            print("reject null hypothesis, mean of {} is less than mean of {}".format('X1', 'X2'))
         else:
-            print("two sample mean is same h0 not rejected")
-
+            compare_mean(x1, x2)
+            print("two sample mean is same h0 accepted")
+    return tTestResult
 
 def nested_cv(X, y, inner_cv, outer_cv, parameter_grid):
     outer_scores = []
@@ -665,7 +673,8 @@ def add_one_hot_with_ind_cd(df):
     for index, row in sector_detailed.iterrows():
         tmp = df[df.ind_cd.str.contains('^'+str(row['range']))]
         for idx, r in tmp.iterrows():
-            df.loc[idx, 'ind'] = row['sector']
+            # df.loc[idx, 'ind'] = row['sector']
+            df.loc[idx, 'ind'] = row['sector2']
     df = add_one_hot(df, 'ind')
     df.drop(['ind_cd'], axis=1, inplace=True)
     return df
@@ -678,7 +687,7 @@ def change_list_to_string_footnote_(df):
 
 
 def tf_idf_prerocess(matched_quanti_and_qual_data, save_dir):
-    save_dir ='C:/Users/lab515/PycharmProjects/crawlDartFootNote/merged_FnGuide/for_per_qual_tf_idf_komoran.npz'
+    # save_dir ='C:/Users/lab515/PycharmProjects/crawlDartFootNote/merged_FnGuide/for_per_qual_tf_idf_komoran.npz'
     """ #if use komoran
     """
 

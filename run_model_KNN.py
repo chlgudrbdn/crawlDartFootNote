@@ -17,10 +17,11 @@ import numpy as np
 from scipy import sparse
 from scipy.sparse import csr_matrix
 import sklearn
+from sklearn.naive_bayes import ComplementNB, MultinomialNB
 from sklearn.model_selection import StratifiedKFold
 from sklearn.feature_extraction.text import TfidfVectorizer
 import scipy.sparse
-from sklearn.ensemble import RandomForestClassifier
+
 
 def make_category_by_quartile(df, col_name):
     df = pd.read_excel('C:\\Users\\lab515\\PycharmProjects\\crawlDartFootNote\\financial ratio for dependent variable\\PER_rawData.xlsx'
@@ -185,7 +186,7 @@ def nested_cv_multiprocess(X, y, inner_cv, outer_cv, parameter_grid, seed):
         print("최적 매개변수:", grid_search.best_params_)
         print("최고 교차 검증 점수: {:.5f}".format(grid_search.best_score_))
         """
-        nbc = clf = RandomForestClassifier(n_estimators=100, max_depth=2, random_state=0)
+        nbc = ComplementNB()
         # cls = BaggingClassifier(base_estimator=nbc, n_estimators=8, n_jobs=-1, max_samples=1.0 / 8.0,)
         nbc.fit(X[training_samples], y[training_samples])
         pred = nbc.predict(X[test_samples])
@@ -220,7 +221,7 @@ def nested_cv_multiprocess(X, y, inner_cv, outer_cv, parameter_grid, seed):
     return np.mean(outer_scores), np.mean(f1_scores)  # 전체 데이터 셋 대상으로 한 test의 예측값.
 
 
-def rf_with_foot_note(X, y, try_cnt):  # https://data-newbie.tistory.com/32 이쪽도 참고바람.
+def nb_with_foot_note(X, y, try_cnt):  # https://data-newbie.tistory.com/32 이쪽도 참고바람.
     param_grid = [{'kernel': ['rbf'],
                    'gamma': ['auto']}]
     over_random_state_try = []
@@ -337,7 +338,7 @@ if __name__ == '__main__':  # 시간내로 하기 위해 멀티프로세싱 적�
     X = csr_matrix(X)
     start_time = datetime.now()
     print("total start_time : ", start_time)
-    acc_list2, f1_list2 = rf_with_foot_note(X, y, 30)
+    acc_list2, f1_list2 = nb_with_foot_note(X, y, 30)
     # rms_list2 = svm_with_foot_note(X, y, 30)
     print(acc_list2)
     print(f1_list2)

@@ -1,4 +1,3 @@
-import preprocess_footnotes_data as pfd
 import pandas as pd
 # import join_pickle_data as jpd
 from sklearn.model_selection import train_test_split
@@ -6,6 +5,9 @@ from datetime import datetime, timedelta
 import numpy as np
 from scipy import sparse
 from scipy.sparse import csr_matrix
+import os
+import preprocess_footnotes_data as pfd
+
 
 def make_category_by_quartile(df, col_name):
     df = pd.read_excel('C:\\Users\\lab515\\PycharmProjects\\crawlDartFootNote\\financial ratio for dependent variable\\PER_rawData.xlsx'
@@ -30,14 +32,17 @@ def make_category_by_quartile(df, col_name):
 
 
 def get_real_eps_change(df):  # 전처리 위한 코드. eps 변화율 데이터에 적자로 전환, 흑자 유지 같은 식으로 나와서 수정 eps를 그대로 계산.
-    df = pd.read_excel('C:\\Users\\lab515\\PycharmProjects\\crawlDartFootNote\\financial ratio for independent variable\\for_PER_independant_var.xlsx'
-                                   , dtype=object, sheet_name='EPS_change_rate_to_calculate')
+    # df = pd.read_excel('C:\\Users\\lab515\\PycharmProjects\\crawlDartFootNote\\financial ratio for independent variable\\for_PER_independant_var.xlsx'
+                                   # , dtype=object, sheet_name='EPS_change_rate_to_calculate')
+    df = pd.read_excel('C:\\Users\\lab515\\PycharmProjects\\crawlDartFootNote\\financial ratio for dependent variable\\PER_rawData.xlsx'
+                                   , dtype=object, sheet_name='return_rearrange_from2012')  # 'price_rearrange.csv'
+                                   # , dtype=object, sheet_name='return_from2012')
     # EPS증가율(전분기) :((수정EPS / 수정EPS(-1Q)) - 1) *100
     cd_list = list(df['Symbol'].unique())
     eps_change_ratio = []
     for cd in cd_list:
         # cd = cd_list[3]  # for test
-        tmp = df[df['Symbol']== cd]
+        tmp = df[df['Symbol'] == cd]
         eps_change_ratio.extend(list(tmp[tmp.columns[-1]].pct_change()*100))
     df['eps_change_ratio'] = eps_change_ratio
     print(df.shape)
@@ -49,17 +54,15 @@ def get_real_eps_change(df):  # 전처리 위한 코드. eps 변화율 데이터
 def rearrange_calender_data(df):  # 전처리 위한 코드. eps 변화율 데이터에 적자로 전환, 흑자 유지 같은 식으로 나와서 수정 eps를 그대로 계산.
     df = pd.read_excel('C:\\Users\\lab515\\PycharmProjects\\crawlDartFootNote\\financial ratio for independent variable\\for_PER_independant_var.xlsx'
                                    , dtype=object, sheet_name='return')
-    # df = pd.read_excel('C:\\Users\\lab515\\PycharmProjects\\crawlDartFootNote\\financial ratio for dependent variable\\PER_rawData.xlsx'
-    #                                , dtype=object, sheet_name='return')
     # '수정주가수익률', #
     df.drop(columns=['Kind', 'Item', 'Item Name ', 'Frequency'], inplace=True)
 
-    arrange_df = pd.DataFrame(columns=['Symbol', 'Name', '결산월', '회계년', '주기', '수정주가분기수익률'])
-    # arrange_df = pd.DataFrame(columns=['Symbol', 'Name', '결산월', '회계년', '주기', '수정주가평균분기'])
+    # arrange_df = pd.DataFrame(columns=['Symbol', 'Name', '결산월', '회계년', '주기', '수정주가분기수익률'])
+    arrange_df = pd.DataFrame(columns=['Symbol', 'Name', '결산월', '회계년', '주기', '수정주가평균분기'])
     i = 0
-    col_names = df.columns[2:]
+    col_names = df.columns[2:]  # 행에 회사 열에 분기말 날짜.
     for index, row in df.iterrows():
-        for col in col_names:
+        for col in col_names:  # 한 줄 내려가고 오른쪽으로 이동하며 하나씩 쌓는다.
             arrange_df.loc[i] = [row.Symbol, row['Symbol Name'], col.month, col.year, str(int(col.month/3))+"Q", row[col]]
             i += 1
     print(df.shape)
@@ -67,7 +70,7 @@ def rearrange_calender_data(df):  # 전처리 위한 코드. eps 변화율 데�
     # set_diff_df = pd.concat([arrange_df[(arrange_df['회계년']==2019)&(arrange_df['결산월']==9)]
     #                             , arrange_df]).drop_duplicates(keep=False)
     # print(set_diff_df.shape[0]/df.shape[0] == (4*len([2013,2014,2015,2016,2017,2018])+2))
-    print(arrange_df.shape[0]/df.shape[0] == (4*len([2013,2014,2015,2016,2017,2018])+2))
+    print(arrange_df.shape[0]/df.shape[0] == (4*len([2013,2014,2015,2016,2017,2018])+3))
     # set_diff_df.to_csv('price.csv', encoding='cp949')
     arrange_df.to_csv('price_rearrange.csv', encoding='cp949')
 
@@ -79,7 +82,8 @@ def match_among_t(df1, df2):
     df1 = pd.read_excel('C:\\Users\\lab515\\PycharmProjects\\crawlDartFootNote\\financial ratio for dependent variable\\PER_rawData.xlsx'
                                    , dtype=object, sheet_name='Sheet1')
     df2 = pd.read_excel('C:\\Users\\lab515\\PycharmProjects\\crawlDartFootNote\\financial ratio for dependent variable\\PER_rawData.xlsx'
-                                   , dtype=object, sheet_name='Sheet3')
+                                   , dtype=object, sheet_name='rearranged_from2003')
+    df2 = pd.read_csv('PER_categorization_with_1q_20.csv', encoding='cp949')
     print(df1.shape)
     print(df2.shape)
     df3 = pd.merge(left=df1, right=df2, how='left', on=['Symbol', 'Name', '회계년', '주기'], sort=False)  # 결산월은 안 맞는 곳이 이따금 있음. 현대해상 2013년 사례가 대표적.
@@ -130,14 +134,123 @@ def add_t_minus_dep_var(quanti_ind_var, dep_vars, dep_var, dep_var_t_minus):  # 
 """
 
 
+
+def match_fnguide_data_among_them(quanti_ind_var, dep_vars, dep_var, ind_var_list, file_name):
+    # quanti_ind_var = pd.read_excel('C:\\Users\\jin\\PycharmProjects\\crawlDartFootNote\\previous research independant variable\\about_EPS_independant_var.xlsx', dtype=object, sheet_name='Sheet1')
+    # dep_var = pd.read_excel('C:\\Users\\jin\\PycharmProjects\\crawlDartFootNote\\financial ratio for dependent variable retrived 2019_05_15\\EPS_rawData.xlsx', dtype=object, sheet_name='Sheet1')
+    # keyword = '수정EPS\(원\)'
+    # file_name = ''
+    identifier = ['Symbol', 'Name', '결산월', '회계년', '주기']
+    dep_vars = pd.concat([dep_vars.loc[:, identifier],
+                         dep_vars.loc[:, dep_var]], axis=1)  # 일단 폼은 유지하되 필요한 변수 하나만 떼다 쓰기 위함.
+    # dep_vars = dep_vars.replace(0, np.nan)  # 가끔 데이터가 없는데 0으로 채워진 경우는 그냥 이렇게 한다. 어차피 데이터가 없을게 뻔해서 의미는 없지만 혹시 모르니까. 특히 거래가 없는 경우. # regression이라면 이 코드가 필요하지만 classification엔 필요 없는 일이었다. 0,1,2로 클래스가 나뉘는 마당에.
+    dep_vars.dropna(thresh=6, inplace=True)  # 식별 위한 정보를 제외한 것이 없는 경우. 어차피 이게 없으면 아무것도 안되므로.
+    # print(dep_var.info())
+
+    # print(quanti_dep_var.columns)
+    # print('ind_var : ', ind_var)
+    identifier.extend(ind_var_list)
+    # print('new ind_var : ', identifier)
+    # quanti_ind_var = quanti_ind_var.drop(columns=list(quanti_ind_var.loc[:, quanti_ind_var.columns.str.contains('^주기')].columns))  # 주기는 불필요하니 제거
+    quanti_ind_var = quanti_ind_var[identifier]
+    print(quanti_ind_var.shape)
+    quanti_ind_var = quanti_ind_var.replace(0, np.nan)  # 가끔 데이터가 없는데 0으로 채워진 경우는 그냥 이렇게 한다. 어차피 데이터가 없을게 뻔해서 의미는 없지만 혹시 모르니까.
+    quanti_ind_var.dropna(thresh=len(identifier), inplace=True)  # 식별 위한 정보를 제외한 것이 없는 경우. 어차피 이게 없으면 아무것도 안되므로.
+    # print(quanti_ind_var.columns)
+    print('quanti_ind_var.info() : ', quanti_ind_var.shape)
+    # print(dep_var)
+    # result_df = pd.DataFrame()
+    for index, row in quanti_ind_var.iterrows():
+        # print(index)
+        tplus_quarter = str(int(row['주기'][0])+1)+'Q'   # 결산월 보다 쿼터 쪽이 신뢰도 있음
+        if tplus_quarter == '5Q':  # tplus_quarter가 원래는 4분기라 다음년도 1분기라면
+            tplus_year = int(row['회계년']) + 1   # 결산월 보다 쿼터 쪽이 신뢰도 있음
+            tplus_quarter = '1Q'
+        else:
+            tplus_year = int(row['회계년'])
+        tplus_data = dep_vars[(dep_vars['Symbol'] == row['Symbol'])
+                              & (dep_vars['회계년'] == tplus_year)
+                              & (dep_vars['주기'] == tplus_quarter)]
+        if tplus_data.shape[0] > 1:  # 중복된 분기의 데이터 없는 문제 확인.
+            print('tplus_data :', tplus_data)  # 일단 미리 없애놨으니 나타날린 없지만 그래도 체크.
+        if tplus_data.empty:
+            # result_df = result_df.append(pd.Series(), ignore_index=True)  # 매칭하는 날짜는 있는데 비어있는 경우 일단 빈칸으로 채우고 넘어간다.
+            quanti_ind_var.loc[index, dep_var] = np.nan
+            print('empty', index)
+            # print(row)
+            continue
+        # result_df = result_df.append(tplus_data, ignore_index=True)  # 찾은 결과를 한줄씩 붙인뒤 나중에 옆으로 붙일 예정.
+        # print('tplus_data : ', tplus_data.values)
+        # print('tplus_data : ', tplus_data[dep_var].iloc[0])
+        # print('tplus_data : ', tplus_data.loc[:, dep_var].values[0].tolist())
+        # print('tplus_data : ', int(tplus_data.loc[:, '수정PER3분할_10y_20p']))
+        for dep in dep_var:
+            quanti_ind_var.loc[index, dep] = int(tplus_data.loc[:, dep])  # t+1 분기와 매칭
+    # result_df = result_df.drop(columns=['Symbol', 'Name', '결산월', '회계년'])  # 종속변수 쪽 식별 정보는 필요 없음.
+    # result_df.reset_index(drop=True, inplace=True)
+    # quanti_ind_var.reset_index(drop=True, inplace=True)
+    # quanti_ind_var = quanti_ind_var.drop(columns=['Name'])  # 그냥 종목번호보다 보기좋아서 냅둔거라. 지워도 상관없음.
+
+    # quanti_ind_var = pd.concat([quanti_ind_var, result_df], axis=1)
+    quanti_ind_var.dropna(inplace=True)  # 이전 단계에서 걸렀을 가능성이 높지만 그래도 1~2개 없는 경우를 거르기 위함.
+    # directory_name = 'merged_FnGuide ind_var/'
+    # if not os.path.exists(directory_name):
+    #     os.mkdir(directory_name)
+    # df1.to_excel(directory_name+'/merged_FnGuide ind_var '+keyword+'.xlsx')
+    directory_name = './merged_FnGuide'
+    if not os.path.exists(directory_name):  # bitcoin_per_date 폴더에 저장되도록, 폴더가 없으면 만들도록함.
+        os.mkdir(directory_name)
+    # np.save('./merged_FnGuide/'+file_name, quanti_ind_var.values)
+    print(quanti_ind_var.iloc[:, 5:].astype('float'))
+    quanti_ind_var.to_pickle(directory_name+'/'+file_name)
+    print(quanti_ind_var.columns)
+    print(quanti_ind_var.shape)
+    print(quanti_ind_var.info())
+
+    return quanti_ind_var  # 다음에 쓰려고 ndarray로 반환하지 않음.
+
+
 if __name__ == '__main__':  # 시간내로 하기 위해 멀티프로세싱 적극 활용 요함.
     # 최초엔 일단 종속_리스트, 독립변수명을 정해두는것이 편해보인다.
     path_dir = 'C:/Users/lab515/PycharmProjects/crawlDartFootNote'  # done (파일사이즈 문제와 전처리 편의를 위해 pickle로 저장하게 함.)
-    dep_var = '수정PER3분할'
+
+    # dep_var = '수정PER3분할_10y_20p'  # 수정PER3분할_10y_20p, 수정PER3분할_10y_25p, 수정PER3분할_10y_33p, 수정PER3분할_1q_20p, 수정PER3분할_1q_25p, 수정PER3분할_1q_33p
+    dep_var = ['수정PER3분할_10y_20p', '수정PER3분할_10y_25p', '수정PER3분할_10y_33p', '수정PER3분할_1q_20p', '수정PER3분할_1q_25p', '수정PER3분할_1q_33p']
+
     ind_var_list = ['M000701061_수정PBR(배)', 'M000901001_ln총자산(천원)', 'debt_asset_ratio', 'eps_change_ratio', '수정주가분기수익률']
-    quanti_data_set_file_name = '/merged_FnGuide/quanti_per_dataset.pkl'
-    qual_set_file_name = '/merged_FnGuide/qual_per_dataset.pkl'
-    quanti_qual_matched_file_name = 'quanti_qaul_per_komoran.pkl'
+    quanti_data_set_file_name = 'quanti_per_komoran.pkl'
+    quanti_qual_matched_file_name = 'quanti_qaul_komoran.pkl'
+
+    """
+    dep_vars = pd.read_excel('C:\\Users\\lab515\\PycharmProjects\\crawlDartFootNote\\financial ratio for dependent variable\\PER_rawData.xlsx'
+                            , dtype=object, sheet_name='Sheet1')  # 종속변수
+    valid = pd.read_pickle(path_dir + '/divide_by_sector/filter8 komoran_for_cosine_distance.pkl')  # 독립변수중 산업이나 코사인거리
+    quanti_ind_var = pd.read_excel('C:\\Users\\lab515\\PycharmProjects\\crawlDartFootNote\\financial ratio for independent variable\\for_PER_independant_var.xlsx'
+                                   , dtype=object, sheet_name='Sheet1')
+
+    matched_quanti_data = match_fnguide_data_among_them(quanti_ind_var, dep_vars, dep_var, ind_var_list, quanti_data_set_file_name)
+
+    dep_vars = dep_vars[['Symbol', 'Name', '결산월', '회계년', '주기', 'M수정PER']]
+    dep_vars.columns = ['Symbol', 'Name', '결산월', '회계년', '주기', 'M수정PER_tminus']
+    matched_quanti_data = pd.merge(left=matched_quanti_data, right=dep_vars, how='left', on=['Symbol', 'Name', '회계년', '주기'], sort=False)  # 결산월은 안 맞는 곳이 이따금 있음. 현대해상 2013년 사례가 대표적.
+
+    matched_quanti_and_qual_data, valid_df_idx_list = pfd.match_quanti_and_qual_data(valid, matched_quanti_data, quanti_qual_matched_file_name)
+    matched_quanti_and_qual_data = pfd.add_one_hot(matched_quanti_and_qual_data, 'crp_cls')
+    matched_quanti_and_qual_data = pfd.add_one_hot(matched_quanti_and_qual_data, '주기')
+    matched_quanti_and_qual_data = pfd.add_one_hot_with_ind_cd(matched_quanti_and_qual_data)
+
+    columns = ['crp_cd', 'crp_nm', 'rpt_nm', 'foot_note', 'rcp_dt', 't_minus_index',
+               't_minus_year_index', 'Symbol', 'Name', '결산월_x', '결산월_y', '회계년']  # 주기는 일단 남긴다.
+    matched_quanti_and_qual_data.drop(columns, inplace=True, axis=1)
+    matched_quanti_and_qual_data.dropna(inplace=True)
+    matched_quanti_and_qual_data.to_pickle(path_dir + '/merged_FnGuide/' + quanti_qual_matched_file_name)
+
+
+    # matched_quanti_and_qual_data.drop(['t_1y_cos_dist'], inplace=True, axis=1)
+    # matched_quanti_and_qual_data.drop(['t_1q_cos_dist'], inplace=True, axis=1)
+    # matched_quanti_and_qual_data = matched_quanti_and_qual_data[matched_quanti_and_qual_data.t_1q_cos_dist != ""]
+    # matched_quanti_and_qual_data['t_1q_cos_dist'] = matched_quanti_and_qual_data['t_1q_cos_dist'].astype('float')
+    """
 
     """
     # fnguide_fin_ratio_dat = pd.read_excel('main_dependant_var.xlsx', dtype=object)
@@ -189,43 +302,68 @@ if __name__ == '__main__':  # 시간내로 하기 위해 멀티프로세싱 적�
     # qual_ind_var.drop(columns, inplace=True, axis=1)
 
     """
-    # matched_quanti_and_qual_data = pd.read_pickle('./merged_FnGuide/quanti_qaul_eps_predict.pkl')
     matched_quanti_and_qual_data = pd.read_pickle('./merged_FnGuide/'+quanti_qual_matched_file_name)
-    # matched_quanti_and_qual_data = matched_quanti_and_qual_data.drop(matched_quanti_and_qual_data.index[0])  # 특이 케이스
-    matched_quanti_and_qual_data['M수정PER'] = matched_quanti_and_qual_data['M수정PER'].astype('float')
+
+    main_ind_var = 't_1q_cos_dist'
+    # main_ind_var = 't_1y_cos_dist'
+
+    dep = dep_var[0]  # ['수정PER3분할_10y_20p', '수정PER3분할_10y_25p', '수정PER3분할_10y_33p', '수정PER3분할_1q_20p', '수정PER3분할_1q_25p', '수정PER3분할_1q_33p'] 중 택1
+    # dep = dep_var[1]  # ['수정PER3분할_10y_20p', '수정PER3분할_10y_25p', '수정PER3분할_10y_33p', '수정PER3분할_1q_20p', '수정PER3분할_1q_25p', '수정PER3분할_1q_33p'] 중 택1
+    # dep = dep_var[2]  # ['수정PER3분할_10y_20p', '수정PER3분할_10y_25p', '수정PER3분할_10y_33p', '수정PER3분할_1q_20p', '수정PER3분할_1q_25p', '수정PER3분할_1q_33p'] 중 택1
+    # dep = dep_var[3]  # ['수정PER3분할_10y_20p', '수정PER3분할_10y_25p', '수정PER3분할_10y_33p', '수정PER3분할_1q_20p', '수정PER3분할_1q_25p', '수정PER3분할_1q_33p'] 중 택1
+    # dep = dep_var[4]  # ['수정PER3분할_10y_20p', '수정PER3분할_10y_25p', '수정PER3분할_10y_33p', '수정PER3분할_1q_20p', '수정PER3분할_1q_25p', '수정PER3분할_1q_33p'] 중 택1
+    # dep = dep_var[5]  # ['수정PER3분할_10y_20p', '수정PER3분할_10y_25p', '수정PER3분할_10y_33p', '수정PER3분할_1q_20p', '수정PER3분할_1q_25p', '수정PER3분할_1q_33p'] 중 택1
+
+    matched_quanti_and_qual_data = matched_quanti_and_qual_data[matched_quanti_and_qual_data[main_ind_var] != ""]  # 택1 결측치 제거.
+
+    matched_quanti_and_qual_data[main_ind_var] = matched_quanti_and_qual_data[main_ind_var].astype('float')
     matched_quanti_and_qual_data[dep_var] = matched_quanti_and_qual_data[dep_var].astype('int8')
+
     print(matched_quanti_and_qual_data.info())
-    # arrange column order
     cols = list(matched_quanti_and_qual_data.columns)
-    cols.remove('foot_note')
-    cols.remove(dep_var)
-    cols.insert(0, "foot_note")
-    cols.append(dep_var)
+    if main_ind_var == 't_1q_cos_dist':
+        cols.remove('t_1y_cos_dist')
+    else:
+        cols.remove('t_1q_cos_dist')
+
+    for d_var in dep_var:
+        cols.remove(d_var)
+    cols.append(dep)
     matched_quanti_and_qual_data = matched_quanti_and_qual_data[cols]
 
-    quanti_data_predict = matched_quanti_and_qual_data.loc[:, matched_quanti_and_qual_data.columns != 'foot_note']
+    quanti_data_predict = matched_quanti_and_qual_data.loc[:, matched_quanti_and_qual_data.columns != main_ind_var]
 
     start_time = datetime.now()
     print("start_time : ", start_time)
     # rms_list1 = previous_research_with_svm(quanti_data_predict.values, 30)
+    print('dependent variable: ', dep)
+    print('main independent variable: ', main_ind_var)
 
-    acc_list1, f1_list1 = pfd.previous_research_with_svm(quanti_data_predict.values, 30)
+    acc_list1, f1_list1 = pfd.svm_with_foot_note(quanti_data_predict.iloc[:, :-1].values,
+                                                 quanti_data_predict.iloc[:, -1].values, 30)
     print("take time : {}".format(datetime.now() - start_time))
-    """
-    acc_list1 = [0.459472,0.459046,0.458718,0.459158,0.458742,0.458874,0.458742,0.458576,0.458782,0.458742,0.458726,0.45907,0.45916,0.459168,0.45921,0.458784,0.45898,0.45898,0.459152,0.458972,0.459134,0.458308,0.459234,0.458642,0.45888,0.459226,0.459342,0.458872,0.458962,0.458732]
-    f1_list1 = [0.226717177,0.2251687,0.227156287,0.226409794,0.2269375,0.226362649,0.227054485,0.22680026,0.227619277,0.226738998,0.22763236,0.227521745,0.22727243,0.226296926,0.22657343,0.226313087,0.227119704,0.226576077,0.226087876,0.227655016,0.226092129,0.225271832,0.227221064,0.225434696,0.227670123,0.22678054,0.22680888,0.227290038,0.227021287,0.227555999]
+    # acc_list1 = [0.459472,0.459046,0.458718,0.459158,0.458742,0.458874,0.458742,0.458576,0.458782,0.458742,0.458726,0.45907,0.45916,0.459168,0.45921,0.458784,0.45898,0.45898,0.459152,0.458972,0.459134,0.458308,0.459234,0.458642,0.45888,0.459226,0.459342,0.458872,0.458962,0.458732]
+    # f1_list1 = [0.226717177,0.2251687,0.227156287,0.226409794,0.2269375,0.226362649,0.227054485,0.22680026,0.227619277,0.226738998,0.22763236,0.227521745,0.22727243,0.226296926,0.22657343,0.226313087,0.227119704,0.226576077,0.226087876,0.227655016,0.226092129,0.225271832,0.227221064,0.225434696,0.227670123,0.22678054,0.22680888,0.227290038,0.227021287,0.227555999]
     # matched_quanti_and_qual_data = pd.read_pickle('./merged_FnGuide/quanti_qaul_per_dataset.pkl')
-    X = sparse.load_npz('./merged_FnGuide/for_per_qual_tf_idf_komoran.npz')
+
+    # X = sparse.load_npz('./merged_FnGuide/for_per_qual_tf_idf_komoran.npz')
+    # X = sparse.load_npz('./merged_FnGuide/for_per_qual_tf_idf_komoran.npz')
     # matched_quanti_and_qual_data = pd.read_pickle('./merged_FnGuide/quanti_qaul_eps_predict.pkl')
-    y = quanti_data_predict.values[:, -1].astype('int8')
-    del quanti_data_predict
-    X = csr_matrix(X)
+    # y = quanti_data_predict.values[:, -1].astype('int8')
+    # del quanti_data_predict
+    # X = csr_matrix(X)
     start_time = datetime.now()
     print("total start_time : ", start_time)
-    acc_list2, f1_list2 = pfd.svm_with_foot_note(X, y, 30)
+
+    # np.random.seed(42)  # for placebo
+    # matched_quanti_and_qual_data[main_ind_var] = np.random.rand(matched_quanti_and_qual_data.shape[0])  # for placebo
+
+    acc_list2, f1_list2 = pfd.svm_with_foot_note(matched_quanti_and_qual_data.iloc[:, :-1].values,
+                                                 matched_quanti_and_qual_data.iloc[:, -1].values, 30)
     # rms_list2 = svm_with_foot_note(X, y, 30)
     print("total take time : {}".format(datetime.now() - start_time))
-    """
-    # pfd.equ_var_test_and_unpaired_t_test(acc_list1, acc_list2)  # 독립 t-test 단방향 검정
-    # pfd.equ_var_test_and_unpaired_t_test(f1_list1, f1_list2)  # 독립 t-test 단방향 검정
 
+    result1 = pfd.equ_var_test_and_unpaired_t_test(acc_list1, acc_list2)  # 독립 t-test 단방향 검정
+    result2 = pfd.equ_var_test_and_unpaired_t_test(f1_list1, f1_list2)  # 독립 t-test 단방향 검정
+    """
+    """

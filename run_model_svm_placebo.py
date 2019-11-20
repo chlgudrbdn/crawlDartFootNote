@@ -1,13 +1,3 @@
-from scipy import sparse
-from scipy.sparse import csr_matrix, hstack
-from scipy import stats
-from sklearn.metrics import make_scorer
-from sklearn.preprocessing import MinMaxScaler
-from sklearn.model_selection import GridSearchCV
-from sklearn.metrics import accuracy_score
-from sklearn.metrics import confusion_matrix
-from sklearn.metrics import f1_score
-from sklearn.ensemble import BaggingClassifier
 import preprocess_footnotes_data as pfd
 import pandas as pd
 # import join_pickle_data as jpd
@@ -15,12 +5,8 @@ from sklearn.model_selection import train_test_split
 from datetime import datetime, timedelta
 import numpy as np
 from scipy import sparse
-from scipy.sparse import csr_matrix
-import sklearn
-from sklearn.model_selection import StratifiedKFold
-from sklearn.feature_extraction.text import TfidfVectorizer
-import scipy.sparse
-from sklearn.ensemble import RandomForestClassifier
+from scipy.sparse import csr_matrix, hstack
+from scipy import sparse
 
 def make_category_by_quartile(df, col_name):
     df = pd.read_excel('C:\\Users\\lab515\\PycharmProjects\\crawlDartFootNote\\financial ratio for dependent variable\\PER_rawData.xlsx'
@@ -145,95 +131,6 @@ def add_t_minus_dep_var(quanti_ind_var, dep_vars, dep_var, dep_var_t_minus):  # 
 """
 
 
-def previous_research_with_nb(dataset, try_cnt):
-    param_grid = [{'kernel': ['rbf'], 'gamma': ['auto']}]
-    over_random_state_try = []
-    over_random_state_try_f1 = []
-    for seed in range(try_cnt):
-        # seed = 42  # for test
-        kf = StratifiedKFold(n_splits=5, random_state=seed, shuffle=True)
-        average_kfold_test_score, f1_score_mean = \
-            nested_cv_multiprocess(dataset[:, :-1], dataset[:, -1].ravel(), kf, kf, param_grid, try_cnt)  # 최소 3*5*5*30=225회
-        print(' try :', seed, " ", average_kfold_test_score)
-        over_random_state_try.append(average_kfold_test_score)
-        over_random_state_try_f1.append(f1_score_mean)
-    return over_random_state_try,over_random_state_try_f1
-
-
-def nested_cv_multiprocess(X, y, inner_cv, outer_cv, parameter_grid, seed):
-    outer_scores = []
-    f1_scores = []
-    print(X.shape)
-    unique_elements, counts_elements = np.unique(y, return_counts=True)
-    print("Frequency of unique values of the said array:")
-    print(np.asarray((unique_elements, counts_elements)))
-    start_time = datetime.now()
-    print("start_time : ", start_time)
-    for training_samples, test_samples in outer_cv.split(X, y):
-        # 최적의 매개변수를 찾습니다  # 파라미터 세트 하나만 시도해보는거니 생략. 결국 5-fold 30번.
-        """
-        if X.shape[1] < 1000:
-            grid_search = GridSearchCV(SVC(), parameter_grid, cv=inner_cv, n_jobs=-1)
-            grid_search.fit(X[training_samples], y[training_samples])
-        # 정성적인데이터도 쓸 경우  # 그냥 파라미터 하나만 쓸 경우.
-        else:
-            X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=seed)
-            print('split done')
-            svc = SVC(kernel='rbf', gamma='auto')
-            svc.fit(X_train, y_train)
-        # 바깥쪽 훈련 데이터 전체를 사용해 분류기를 만듭니다
-        print("최적 매개변수:", grid_search.best_params_)
-        print("최고 교차 검증 점수: {:.5f}".format(grid_search.best_score_))
-        """
-        nbc = clf = RandomForestClassifier(n_estimators=100, max_depth=2, random_state=0)
-        # cls = BaggingClassifier(base_estimator=nbc, n_estimators=8, n_jobs=-1, max_samples=1.0 / 8.0,)
-        nbc.fit(X[training_samples], y[training_samples])
-        pred = nbc.predict(X[test_samples])
-        mean_acc = accuracy_score(y[test_samples], pred)
-        f1 = f1_score(y[test_samples], pred, average='macro')
-        print('mean acurracy of this param on testset :', mean_acc)
-        print('confusion acurracy of this param on testset :\n', confusion_matrix(y[test_samples], pred))
-        print('f1 score of this param on testset :', f1)
-        outer_scores.append(mean_acc)
-        f1_scores.append(f1)
-        print("take time : {}".format(datetime.now() - start_time))
-        # print('outer_scores: ', outer_scores)
-        #, sqrt(mean_squared_error(reg.predict(X[test_samples]), y[test_samples]))))  # 이중 리스트로, 첫번째는 r^2 두번째는 rmse
-    '''
-    for training_samples, test_samples in outer_cv.split(X, y):
-        # 최적의 매개변수를 찾습니다
-        # grid_search = GridSearchCV(SVR(), parameter_grid, cv=inner_cv, n_jobs=-1)
-        # print(training_samples.tolist())
-        # scores = cross_val_score(SVR(**parameter_grid), X.todok()[training_samples.tolist()], y.todok()[training_samples.tolist()], cv=inner_cv)
-        # grid_search.fit(X.todok()[training_samples.tolist()], y.todok()[training_samples.tolist()])
-        # 바깥쪽 훈련 데이터 전체를 사용해 분류기를 만듭니다
-        # print("교차 검증 점수: ", scores)
-        reg = SVR(kernel='rbf', gamma='auto')
-        reg.fit(X.todok()[training_samples.tolist()], y.todok()[training_samples.tolist()])
-        # 테스트 세트를 사용해 평가합니다
-        # outer_scores.append(reg.score(X[test_samples], y[test_samples]))
-        print('R^2 of this param : ', reg.score(X.todok()[training_samples.tolist()], y.todok()[training_samples.tolist()]))
-        # 테스트 세트를 사용해 평가합니다
-        outer_scores.append(sqrt(mean_squared_error(reg.predict(X.todok()[test_samples.tolist()]), y.todok()[test_samples.tolist()])))
-    print('outer_scores: ', outer_scores)
-    '''
-    return np.mean(outer_scores), np.mean(f1_scores)  # 전체 데이터 셋 대상으로 한 test의 예측값.
-
-
-def rf_with_foot_note(X, y, try_cnt):  # https://data-newbie.tistory.com/32 이쪽도 참고바람.
-    param_grid = [{'kernel': ['rbf'],
-                   'gamma': ['auto']}]
-    over_random_state_try = []
-    over_random_state_try_f1 = []
-    for seed in range(try_cnt):
-        kf = StratifiedKFold(n_splits=5, random_state=seed, shuffle=True)
-        average_kfold_test_score, f1_score_mean = nested_cv_multiprocess(X, y, kf, kf, param_grid, seed)
-        over_random_state_try.append(average_kfold_test_score)
-        over_random_state_try_f1.append(f1_score_mean)
-        print(' try :', seed, " ", average_kfold_test_score)
-    return over_random_state_try, over_random_state_try_f1
-
-
 if __name__ == '__main__':  # 시간내로 하기 위해 멀티프로세싱 적극 활용 요함.
     # 최초엔 일단 종속_리스트, 독립변수명을 정해두는것이 편해보인다.
     path_dir = 'C:/Users/lab515/PycharmProjects/crawlDartFootNote'  # done (파일사이즈 문제와 전처리 편의를 위해 pickle로 저장하게 함.)
@@ -295,6 +192,7 @@ if __name__ == '__main__':  # 시간내로 하기 위해 멀티프로세싱 적�
     """
     # matched_quanti_and_qual_data = pd.read_pickle('./merged_FnGuide/quanti_qaul_eps_predict.pkl')
     matched_quanti_and_qual_data = pd.read_pickle('./merged_FnGuide/'+quanti_qual_matched_file_name)
+    # matched_quanti_and_qual_data = matched_quanti_and_qual_data.drop(matched_quanti_and_qual_data.index[0])  # 특이 케이스
     matched_quanti_and_qual_data['M수정PER'] = matched_quanti_and_qual_data['M수정PER'].astype('float')
     matched_quanti_and_qual_data[dep_var] = matched_quanti_and_qual_data[dep_var].astype('int8')
     print(matched_quanti_and_qual_data.info())
@@ -307,41 +205,38 @@ if __name__ == '__main__':  # 시간내로 하기 위해 멀티프로세싱 적�
     matched_quanti_and_qual_data = matched_quanti_and_qual_data[cols]
 
     quanti_data_predict = matched_quanti_and_qual_data.loc[:, matched_quanti_and_qual_data.columns != 'foot_note']
-
-    scaler = MinMaxScaler()
-    float_col = quanti_data_predict.select_dtypes(include='float64').columns
-    quanti_data_predict[float_col] = scaler.fit_transform(quanti_data_predict[float_col])
     """
     start_time = datetime.now()
     print("start_time : ", start_time)
     # rms_list1 = previous_research_with_svm(quanti_data_predict.values, 30)
-    acc_list1, f1_list1 = previous_research_with_nb(quanti_data_predict.values, 30)
-    print(acc_list1)
-    print(f1_list1)
+
+    acc_list1, f1_list1 = pfd.previous_research_with_svm(quanti_data_predict.values, 30)
     print("take time : {}".format(datetime.now() - start_time))
+    """
+    acc_list1 = [0.459472,0.459046,0.458718,0.459158,0.458742,0.458874,0.458742,0.458576,0.458782,0.458742,0.458726,0.45907,0.45916,0.459168,0.45921,0.458784,0.45898,0.45898,0.459152,0.458972,0.459134,0.458308,0.459234,0.458642,0.45888,0.459226,0.459342,0.458872,0.458962,0.458732]
+    f1_list1 = [0.226717177,0.2251687,0.227156287,0.226409794,0.2269375,0.226362649,0.227054485,0.22680026,0.227619277,0.226738998,0.22763236,0.227521745,0.22727243,0.226296926,0.22657343,0.226313087,0.227119704,0.226576077,0.226087876,0.227655016,0.226092129,0.225271832,0.227221064,0.225434696,0.227670123,0.22678054,0.22680888,0.227290038,0.227021287,0.227555999]
     # matched_quanti_and_qual_data = pd.read_pickle('./merged_FnGuide/quanti_qaul_per_dataset.pkl')
     """
-    """
-    tf = TfidfVectorizer(max_df=0.95, min_df=0)
-    tfidf_matrix = tf.fit_transform(matched_quanti_and_qual_data['foot_note'])
+    tfidf_matrix = sparse.load_npz('./merged_FnGuide/placebo.npz')
 
-    B = csr_matrix(quanti_data_predict.values[:,:-1])
+    B = csr_matrix(quanti_data_predict.values[:, :-1])
     tfidf_matrix_and_quanti = hstack([tfidf_matrix, B])
-    save_dir ='C:/Users/lab515/PycharmProjects/crawlDartFootNote/merged_FnGuide/for_per_qual_tf_idf_komoran_not_negative.npz'
-    scipy.sparse.save_npz(save_dir, tfidf_matrix_and_quanti)
+    print(tfidf_matrix_and_quanti.toarray())
+    save_dir = 'C:/Users/lab515/PycharmProjects/crawlDartFootNote/merged_FnGuide/placebo.npz'
+
+    sparse.save_npz(save_dir, tfidf_matrix_and_quanti)
     """
-    X = sparse.load_npz('./merged_FnGuide/for_per_qual_tf_idf_komoran_not_negative.npz')
+    X = sparse.load_npz('./merged_FnGuide/placebo.npz')
     # matched_quanti_and_qual_data = pd.read_pickle('./merged_FnGuide/quanti_qaul_eps_predict.pkl')
     y = quanti_data_predict.values[:, -1].astype('int8')
     del quanti_data_predict
     X = csr_matrix(X)
     start_time = datetime.now()
     print("total start_time : ", start_time)
-    acc_list2, f1_list2 = rf_with_foot_note(X, y, 30)
+    acc_list2, f1_list2 = pfd.svm_with_foot_note(X, y, 30)
     # rms_list2 = svm_with_foot_note(X, y, 30)
-    print(acc_list2)
-    print(f1_list2)
     print("total take time : {}".format(datetime.now() - start_time))
 
-    # pfd.equ_var_test_and_unpaired_t_test(acc_list1, acc_list2)  # 독립 t-test 단방향 검정
-    # pfd.equ_var_test_and_unpaired_t_test(f1_list1, f1_list2)  # 독립 t-test 단방향 검정
+    pfd.equ_var_test_and_unpaired_t_test(acc_list1, acc_list2)  # 독립 t-test 단방향 검정
+    pfd.equ_var_test_and_unpaired_t_test(f1_list1, f1_list2)  # 독립 t-test 단방향 검정
+
